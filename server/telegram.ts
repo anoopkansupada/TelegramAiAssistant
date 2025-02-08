@@ -37,15 +37,48 @@ bot.on("message", async (ctx) => {
   });
 });
 
-// Send announcements
-export async function sendAnnouncement(content: string) {
-  const contacts = await storage.listContacts();
-  
-  for (const contact of contacts) {
+// Track when bot is added to channels/groups
+bot.on("my_chat_member", async (ctx) => {
+  const chat = ctx.myChatMember.chat;
+
+  if (chat.type === "channel" || chat.type === "group" || chat.type === "supergroup") {
     try {
-      await bot.telegram.sendMessage(contact.telegramId, content);
+      const existingChannel = await storage.getTelegramChannelByTelegramId(chat.id.toString());
+
+      if (!existingChannel) {
+        await storage.createTelegramChannel({
+          name: chat.title || "Unnamed Channel",
+          telegramId: chat.id.toString(),
+          type: chat.type,
+          createdById: 1, // System user
+        });
+      }
     } catch (error) {
-      console.error(`Failed to send announcement to ${contact.name}:`, error);
+      console.error("Failed to track channel/group:", error);
+    }
+  }
+});
+
+// Send announcements to specific channels/groups or all
+export async function sendAnnouncement(content: string, targetChannelIds?: string[]) {
+  if (targetChannelIds && targetChannelIds.length > 0) {
+    // Send to specific channels
+    for (const channelId of targetChannelIds) {
+      try {
+        await bot.telegram.sendMessage(channelId, content);
+      } catch (error) {
+        console.error(`Failed to send announcement to channel ${channelId}:`, error);
+      }
+    }
+  } else {
+    // Send to all channels
+    const channels = await storage.listTelegramChannels();
+    for (const channel of channels) {
+      try {
+        await bot.telegram.sendMessage(channel.telegramId, content);
+      } catch (error) {
+        console.error(`Failed to send announcement to ${channel.name}:`, error);
+      }
     }
   }
 }

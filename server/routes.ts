@@ -55,6 +55,13 @@ export function registerRoutes(app: Express): Server {
     res.json(announcements);
   });
 
+  // Telegram Channels
+  app.get("/api/telegram-channels", async (req, res) => {
+    const channels = await storage.listTelegramChannels();
+    res.json(channels);
+  });
+
+  // Update the announcement POST route to support targeting
   app.post("/api/announcements", async (req, res) => {
     const announcement = await storage.createAnnouncement({
       content: req.body.content,
@@ -62,7 +69,7 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Send announcement via Telegram bot
-    await sendAnnouncement(req.body.content);
+    await sendAnnouncement(req.body.content, req.body.targetChannelIds);
 
     res.status(201).json(announcement);
   });

@@ -37,6 +37,16 @@ export const announcements = pgTable("announcements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Add new table for Telegram channels after the announcements table
+export const telegramChannels = pgTable("telegram_channels", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  telegramId: text("telegram_id").notNull().unique(),
+  type: text("type").notNull(), // 'group' or 'channel'
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -63,12 +73,23 @@ export const insertAnnouncementSchema = createInsertSchema(announcements).pick({
   content: true,
 });
 
+// Add new insert schema after other insert schemas
+export const insertTelegramChannelSchema = createInsertSchema(telegramChannels).pick({
+  name: true,
+  telegramId: true,
+  type: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+
+// Add new type after other types
+export type InsertTelegramChannel = z.infer<typeof insertTelegramChannelSchema>;
+export type TelegramChannel = typeof telegramChannels.$inferSelect;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;

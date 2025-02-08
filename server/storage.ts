@@ -1,6 +1,9 @@
-import createMemoryStore from "memorystore";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import { InsertUser, User, Contact, Company, Message, Announcement, 
+         users, contacts, companies, messages, announcements } from "@shared/schema";
 import session from "express-session";
-import { InsertUser, User, Contact, Company, Message, Announcement, InsertContact, InsertCompany, InsertMessage, InsertAnnouncement } from "@shared/schema";
+import createMemoryStore from "memorystore";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -15,7 +18,7 @@ export interface IStorage {
   getContactByTelegramId(telegramId: string): Promise<Contact | undefined>;
   listContacts(): Promise<Contact[]>;
   createContact(contact: InsertContact & { createdById: number }): Promise<Contact>;
-  
+
   // Companies
   getCompany(id: number): Promise<Company | undefined>;
   listCompanies(): Promise<Company[]>;
@@ -31,31 +34,19 @@ export interface IStorage {
   listAnnouncements(): Promise<Announcement[]>;
   createAnnouncement(announcement: InsertAnnouncement & { createdById: number }): Promise<Announcement>;
 
-  sessionStore: session.SessionStore;
+  // Telegram Channels
+  getTelegramChannel(id: number): Promise<TelegramChannel | undefined>;
+  getTelegramChannelByTelegramId(telegramId: string): Promise<TelegramChannel | undefined>;
+  listTelegramChannels(): Promise<TelegramChannel[]>;
+  createTelegramChannel(channel: InsertTelegramChannel & { createdById: number }): Promise<TelegramChannel>;
+
+  sessionStore: session.Store;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private contacts: Map<number, Contact>;
-  private companies: Map<number, Company>;
-  private messages: Map<number, Message>;
-  private announcements: Map<number, Announcement>;
-  private currentIds: {[key: string]: number};
-  sessionStore: session.SessionStore;
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.contacts = new Map();
-    this.companies = new Map();
-    this.messages = new Map();
-    this.announcements = new Map();
-    this.currentIds = {
-      users: 1,
-      contacts: 1, 
-      companies: 1,
-      messages: 1,
-      announcements: 1
-    };
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000
     });
@@ -63,90 +54,115 @@ export class MemStorage implements IStorage {
 
   // Auth
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(u => u.username === username);
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentIds.users++;
-    const user = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
   // Contacts
   async getContact(id: number): Promise<Contact | undefined> {
-    return this.contacts.get(id);
+    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+    return contact;
   }
 
   async getContactByTelegramId(telegramId: string): Promise<Contact | undefined> {
-    return Array.from(this.contacts.values()).find(c => c.telegramId === telegramId);
+    const [contact] = await db.select().from(contacts).where(eq(contacts.telegramId, telegramId));
+    return contact;
   }
 
   async listContacts(): Promise<Contact[]> {
-    return Array.from(this.contacts.values());
+    return await db.select().from(contacts);
   }
 
   async createContact(contact: InsertContact & { createdById: number }): Promise<Contact> {
-    const id = this.currentIds.contacts++;
-    const newContact = { ...contact, id };
-    this.contacts.set(id, newContact);
+    const [newContact] = await db.insert(contacts).values(contact).returning();
     return newContact;
   }
 
   // Companies
   async getCompany(id: number): Promise<Company | undefined> {
-    return this.companies.get(id);
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company;
   }
 
   async listCompanies(): Promise<Company[]> {
-    return Array.from(this.companies.values());
+    return await db.select().from(companies);
   }
 
   async createCompany(company: InsertCompany & { createdById: number }): Promise<Company> {
-    const id = this.currentIds.companies++;
-    const newCompany = { ...company, id };
-    this.companies.set(id, newCompany);
+    const [newCompany] = await db.insert(companies).values(company).returning();
     return newCompany;
   }
 
   // Messages
   async getMessage(id: number): Promise<Message | undefined> {
-    return this.messages.get(id);
+    const [message] = await db.select().from(messages).where(eq(messages.id, id));
+    return message;
   }
 
   async listMessages(contactId: number): Promise<Message[]> {
-    return Array.from(this.messages.values())
-      .filter(m => m.contactId === contactId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return await db.select()
+      .from(messages)
+      .where(eq(messages.contactId, contactId))
+      .orderBy(messages.createdAt);
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
-    const id = this.currentIds.messages++;
-    const newMessage = { ...message, id, createdAt: new Date() };
-    this.messages.set(id, newMessage);
+    const [newMessage] = await db.insert(messages)
+      .values({ ...message, createdAt: new Date() })
+      .returning();
     return newMessage;
   }
 
   // Announcements
   async getAnnouncement(id: number): Promise<Announcement | undefined> {
-    return this.announcements.get(id);
+    const [announcement] = await db.select().from(announcements).where(eq(announcements.id, id));
+    return announcement;
   }
 
   async listAnnouncements(): Promise<Announcement[]> {
-    return Array.from(this.announcements.values())
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return await db.select()
+      .from(announcements)
+      .orderBy(announcements.createdAt);
   }
 
   async createAnnouncement(announcement: InsertAnnouncement & { createdById: number }): Promise<Announcement> {
-    const id = this.currentIds.announcements++;
-    const newAnnouncement = { ...announcement, id, createdAt: new Date() };
-    this.announcements.set(id, newAnnouncement);
+    const [newAnnouncement] = await db.insert(announcements)
+      .values({ ...announcement, createdAt: new Date() })
+      .returning();
     return newAnnouncement;
+  }
+
+  // Telegram Channels
+  async getTelegramChannel(id: number): Promise<TelegramChannel | undefined> {
+    const [channel] = await db.select().from(telegramChannels).where(eq(telegramChannels.id, id));
+    return channel;
+  }
+
+  async getTelegramChannelByTelegramId(telegramId: string): Promise<TelegramChannel | undefined> {
+    const [channel] = await db.select().from(telegramChannels).where(eq(telegramChannels.telegramId, telegramId));
+    return channel;
+  }
+
+  async listTelegramChannels(): Promise<TelegramChannel[]> {
+    return await db.select().from(telegramChannels);
+  }
+
+  async createTelegramChannel(channel: InsertTelegramChannel & { createdById: number }): Promise<TelegramChannel> {
+    const [newChannel] = await db.insert(telegramChannels)
+      .values({ ...channel, createdAt: new Date() })
+      .returning();
+    return newChannel;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { InsertUser, User, Contact, Company, Message, Announcement, 
          users, contacts, companies, messages, announcements,
          TelegramChannel, telegramChannels, InsertContact, InsertCompany,
@@ -144,9 +144,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAnnouncement(announcement: InsertAnnouncement & { createdById: number }): Promise<Announcement> {
-    const [newAnnouncement] = await db.insert(announcements)
-      .values({ ...announcement, createdAt: new Date() })
-      .returning();
+    const [newAnnouncement] = await db.insert(announcements).values(announcement).returning();
     return newAnnouncement;
   }
 
@@ -166,9 +164,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTelegramChannel(channel: InsertTelegramChannel & { createdById: number }): Promise<TelegramChannel> {
-    const [newChannel] = await db.insert(telegramChannels)
-      .values({ ...channel, createdAt: new Date() })
-      .returning();
+    const [newChannel] = await db.insert(telegramChannels).values(channel).returning();
     return newChannel;
   }
 
@@ -187,7 +183,10 @@ export class DatabaseStorage implements IStorage {
 
   async createChannelInvitation(invitation: InsertChannelInvitation & { createdById: number }): Promise<ChannelInvitation> {
     const [newInvitation] = await db.insert(channelInvitations)
-      .values({ ...invitation, createdAt: new Date() })
+      .values({
+        ...invitation,
+        createdAt: sql`now()`,
+      })
       .returning();
     return newInvitation;
   }
@@ -202,7 +201,9 @@ export class DatabaseStorage implements IStorage {
 
   async incrementInvitationUses(id: number): Promise<ChannelInvitation> {
     const [updatedInvitation] = await db.update(channelInvitations)
-      .set({ currentUses: db.raw('current_uses + 1') })
+      .set({
+        currentUses: sql`${channelInvitations.currentUses} + 1`,
+      })
       .where(eq(channelInvitations.id, id))
       .returning();
     return updatedInvitation;

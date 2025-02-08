@@ -1,7 +1,9 @@
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { InsertUser, User, Contact, Company, Message, Announcement, 
-         users, contacts, companies, messages, announcements } from "@shared/schema";
+         users, contacts, companies, messages, announcements,
+         TelegramChannel, telegramChannels, InsertContact, InsertCompany,
+         InsertMessage, InsertAnnouncement, InsertTelegramChannel } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 

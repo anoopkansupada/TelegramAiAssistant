@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { InsertUser, User, Contact, Company, Message, Announcement, 
          users, contacts, companies, messages, announcements,
          TelegramChannel, telegramChannels, InsertContact, InsertCompany,
-         InsertMessage, InsertAnnouncement, InsertTelegramChannel } from "@shared/schema";
+         InsertMessage, InsertAnnouncement, InsertTelegramChannel,
+         channelInvitations, ChannelInvitation, InsertChannelInvitation } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
@@ -41,6 +42,13 @@ export interface IStorage {
   getTelegramChannelByTelegramId(telegramId: string): Promise<TelegramChannel | undefined>;
   listTelegramChannels(): Promise<TelegramChannel[]>;
   createTelegramChannel(channel: InsertTelegramChannel & { createdById: number }): Promise<TelegramChannel>;
+
+  // Channel Invitations
+  getChannelInvitation(id: number): Promise<ChannelInvitation | undefined>;
+  listChannelInvitations(channelId: number): Promise<ChannelInvitation[]>;
+  createChannelInvitation(invitation: InsertChannelInvitation & { createdById: number }): Promise<ChannelInvitation>;
+  updateInvitationStatus(id: number, status: string): Promise<ChannelInvitation>;
+  incrementInvitationUses(id: number): Promise<ChannelInvitation>;
 
   sessionStore: session.Store;
 }
@@ -119,9 +127,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
-    const [newMessage] = await db.insert(messages)
-      .values({ ...message, createdAt: new Date() })
-      .returning();
+    const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
   }
 
@@ -164,6 +170,42 @@ export class DatabaseStorage implements IStorage {
       .values({ ...channel, createdAt: new Date() })
       .returning();
     return newChannel;
+  }
+
+  // Channel Invitations
+  async getChannelInvitation(id: number): Promise<ChannelInvitation | undefined> {
+    const [invitation] = await db.select().from(channelInvitations).where(eq(channelInvitations.id, id));
+    return invitation;
+  }
+
+  async listChannelInvitations(channelId: number): Promise<ChannelInvitation[]> {
+    return await db.select()
+      .from(channelInvitations)
+      .where(eq(channelInvitations.channelId, channelId))
+      .orderBy(channelInvitations.createdAt);
+  }
+
+  async createChannelInvitation(invitation: InsertChannelInvitation & { createdById: number }): Promise<ChannelInvitation> {
+    const [newInvitation] = await db.insert(channelInvitations)
+      .values({ ...invitation, createdAt: new Date() })
+      .returning();
+    return newInvitation;
+  }
+
+  async updateInvitationStatus(id: number, status: string): Promise<ChannelInvitation> {
+    const [updatedInvitation] = await db.update(channelInvitations)
+      .set({ status })
+      .where(eq(channelInvitations.id, id))
+      .returning();
+    return updatedInvitation;
+  }
+
+  async incrementInvitationUses(id: number): Promise<ChannelInvitation> {
+    const [updatedInvitation] = await db.update(channelInvitations)
+      .set({ currentUses: db.raw('current_uses + 1') })
+      .where(eq(channelInvitations.id, id))
+      .returning();
+    return updatedInvitation;
   }
 }
 

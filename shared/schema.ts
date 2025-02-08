@@ -37,7 +37,6 @@ export const announcements = pgTable("announcements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Add new table for Telegram channels after the announcements table
 export const telegramChannels = pgTable("telegram_channels", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -47,7 +46,18 @@ export const telegramChannels = pgTable("telegram_channels", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Insert schemas
+export const channelInvitations = pgTable("channel_invitations", {
+  id: serial("id").primaryKey(),
+  channelId: integer("channel_id").notNull(),
+  inviteLink: text("invite_link").notNull(),
+  status: text("status").notNull().default("active"), // 'active', 'expired', 'revoked'
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  maxUses: integer("max_uses"),
+  currentUses: integer("current_uses").default(0),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -73,26 +83,37 @@ export const insertAnnouncementSchema = createInsertSchema(announcements).pick({
   content: true,
 });
 
-// Add new insert schema after other insert schemas
 export const insertTelegramChannelSchema = createInsertSchema(telegramChannels).pick({
   name: true,
   telegramId: true,
   type: true,
 });
 
-// Types
+export const insertChannelInvitationSchema = createInsertSchema(channelInvitations)
+  .pick({
+    channelId: true,
+    inviteLink: true,
+    status: true,
+    maxUses: true,
+    expiresAt: true,
+  })
+  .extend({
+    expiresAt: z.string().datetime().optional(),
+    maxUses: z.number().min(1).optional(),
+  });
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
-
-// Add new type after other types
 export type InsertTelegramChannel = z.infer<typeof insertTelegramChannelSchema>;
-export type TelegramChannel = typeof telegramChannels.$inferSelect;
+export type InsertChannelInvitation = z.infer<typeof insertChannelInvitationSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type Announcement = typeof announcements.$inferSelect;
+export type TelegramChannel = typeof telegramChannels.$inferSelect;
+export type ChannelInvitation = typeof channelInvitations.$inferSelect;

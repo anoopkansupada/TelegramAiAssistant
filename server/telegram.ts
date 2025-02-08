@@ -83,6 +83,36 @@ export async function sendAnnouncement(content: string, targetChannelIds?: strin
   }
 }
 
+// Generate invite link for a channel
+export async function generateChannelInviteLink(
+  channelId: string,
+  options?: {
+    expireDate?: number;
+    memberLimit?: number;
+  }
+) {
+  try {
+    const inviteLink = await bot.telegram.createChatInviteLink(channelId, {
+      expire_date: options?.expireDate,
+      member_limit: options?.memberLimit,
+    });
+    return inviteLink.invite_link;
+  } catch (error) {
+    console.error(`Failed to generate invite link for channel ${channelId}:`, error);
+    throw error;
+  }
+}
+
+// Revoke an invite link
+export async function revokeChannelInviteLink(channelId: string, inviteLink: string) {
+  try {
+    await bot.telegram.revokeChatInviteLink(channelId, inviteLink);
+  } catch (error) {
+    console.error(`Failed to revoke invite link for channel ${channelId}:`, error);
+    throw error;
+  }
+}
+
 bot.launch();
 
 process.once("SIGINT", () => bot.stop("SIGINT"));

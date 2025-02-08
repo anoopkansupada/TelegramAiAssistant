@@ -11,6 +11,7 @@ import {
   PieChart,
   LogOut,
   Plus,
+  Share2,
 } from "lucide-react";
 import {
   Message,
@@ -122,7 +123,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {/* Navigation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Link href="/crm">
             <Card className="hover:border-primary cursor-pointer transition-colors">
               <CardContent className="flex items-center gap-4 pt-6">
@@ -131,6 +132,20 @@ export default function Dashboard() {
                   <h2 className="text-lg font-semibold">CRM</h2>
                   <p className="text-sm text-muted-foreground">
                     Manage contacts and companies
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/channels">
+            <Card className="hover:border-primary cursor-pointer transition-colors">
+              <CardContent className="flex items-center gap-4 pt-6">
+                <Share2 className="h-8 w-8 text-primary" />
+                <div>
+                  <h2 className="text-lg font-semibold">Channels</h2>
+                  <p className="text-sm text-muted-foreground">
+                    View connected Telegram channels
                   </p>
                 </div>
               </CardContent>

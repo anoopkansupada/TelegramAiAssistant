@@ -8,12 +8,14 @@ import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import CRM from "@/pages/crm";
+import Channels from "@/pages/channels";
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/crm" component={CRM} />
+      <ProtectedRoute path="/channels" component={Channels} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

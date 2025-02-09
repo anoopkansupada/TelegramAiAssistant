@@ -9,7 +9,10 @@ async function cleanupExistingClient() {
   if (client) {
     try {
       console.log("[Userbot] Cleaning up existing client");
-      await client.disconnect();
+      if (client.connected) {
+        await client.disconnect();
+      }
+      await client.destroy();
       client = null;
     } catch (error) {
       console.error("[Userbot] Error during cleanup:", error);
@@ -40,6 +43,12 @@ export async function initializeUserbot() {
       deviceModel: "Desktop",
       systemVersion: "Windows 10",
       appVersion: "1.0.0",
+      baseLogger: {
+        debug: (...args) => console.debug('[TG Debug]', ...args),
+        info: (...args) => console.info('[TG Info]', ...args),
+        warn: (...args) => console.warn('[TG Warn]', ...args),
+        error: (...args) => console.error('[TG Error]', ...args),
+      }
     });
 
     console.log("[Userbot] Client instance created successfully");
@@ -71,26 +80,44 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
 
     console.log("[Userbot] Sending verification code");
     try {
-      const { phoneCodeHash } = await client.sendCode({
+      const result = await client.invoke(new Api.auth.SendCode({
+        phoneNumber: formattedPhone,
         apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
         apiHash: process.env.TELEGRAM_API_HASH!,
-        phoneNumber: formattedPhone,
-      });
+        settings: new Api.CodeSettings({
+          allowFlashcall: false,
+          currentNumber: true,
+          allowAppHash: true,
+          allowMissedCall: false,
+          logoutTokens: []
+        })
+      }));
 
       console.log("[Userbot] Verification code sent successfully");
-      return phoneCodeHash;
+      return result.phoneCodeHash;
     } catch (error: any) {
+      console.log("[Userbot] Initial sendCode error:", error.message);
+
       if (error.errorMessage?.includes('AUTH_RESTART')) {
         console.log("[Userbot] AUTH_RESTART detected, retrying after cleanup");
         await cleanupExistingClient();
         client = await initializeUserbot();
         await client.connect();
-        const { phoneCodeHash } = await client.sendCode({
+
+        const retryResult = await client.invoke(new Api.auth.SendCode({
+          phoneNumber: formattedPhone,
           apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
           apiHash: process.env.TELEGRAM_API_HASH!,
-          phoneNumber: formattedPhone,
-        });
-        return phoneCodeHash;
+          settings: new Api.CodeSettings({
+            allowFlashcall: false,
+            currentNumber: true,
+            allowAppHash: true,
+            allowMissedCall: false,
+            logoutTokens: []
+          })
+        }));
+
+        return retryResult.phoneCodeHash;
       }
       throw error;
     }
@@ -123,20 +150,22 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
       throw new Error("Missing required parameters for verification");
     }
 
-    console.log("[Userbot] Connecting client for verification");
-    await client.connect();
-    console.log("[Userbot] Client connected for verification");
+    if (!client.connected) {
+      console.log("[Userbot] Connecting client for verification");
+      await client.connect();
+      console.log("[Userbot] Client connected for verification");
+    }
 
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     console.log("[Userbot] Formatted phone for verification:", formattedPhone);
 
     console.log("[Userbot] Attempting to sign in");
     try {
-      const signInResult = await client.signIn({
+      const signInResult = await client.invoke(new Api.auth.SignIn({
         phoneNumber: formattedPhone,
         phoneCode: code,
-        phoneCodeHash: phoneCodeHash,
-      });
+        phoneCodeHash: phoneCodeHash
+      }));
 
       console.log("[Userbot] Sign in successful");
       const sessionString = client.session.save() as unknown as string;
@@ -174,9 +203,21 @@ export async function verify2FA(password: string): Promise<string> {
     }
 
     try {
-      const result = await client.signInWithPassword({
-        password: password,
-      });
+      // Get the current account's password info
+      const passwordInfo = await client.invoke(new Api.account.GetPassword());
+
+      // Calculate the password check using the SRP protocol
+      const { A, M1 } = await computeCheck(passwordInfo, password);
+
+      // Verify the password
+      await client.invoke(new Api.auth.CheckPassword({
+        password: {
+          className: "InputCheckPasswordSRP",
+          srpId: passwordInfo.srpId,
+          A: A.toString('hex'),
+          M1: M1.toString('hex')
+        }
+      }));
 
       console.log("[Userbot] 2FA verification successful");
       const sessionString = client.session.save() as unknown as string;

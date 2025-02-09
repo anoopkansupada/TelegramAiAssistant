@@ -36,6 +36,121 @@ declare global {
   var broadcastStatus: (status: StatusUpdate) => void;
 }
 
+export async function getOrCreateClient(session: string): Promise<TelegramClient> {
+  try {
+    console.log("[UserBot] Starting client initialization...");
+    console.log("[UserBot] Client instance state:", {
+      hasClient: !!clientInstance.client,
+      currentSession: clientInstance.session?.slice(0, 10) + "...",
+      newSession: session.slice(0, 10) + "...",
+      lastUsed: new Date(clientInstance.lastUsed).toISOString(),
+      connected: clientInstance.connected
+    });
+
+    // If we already have a client with the same session, reuse it
+    if (clientInstance.client && clientInstance.session === session) {
+      console.log("[UserBot] Found existing client, verifying connection...");
+      try {
+        const me = await clientInstance.client.getMe();
+        console.log("[UserBot] Existing client is connected, user:", {
+          id: me?.id,
+          username: me?.username,
+          firstName: me?.firstName
+        });
+        clientInstance.lastUsed = Date.now();
+        clientInstance.connected = true;
+        return clientInstance.client;
+      } catch (error) {
+        console.log("[UserBot] Existing client check failed:", error);
+        // If check fails, try to reconnect
+        try {
+          console.log("[UserBot] Attempting to reconnect existing client");
+          await clientInstance.client.connect();
+          const me = await clientInstance.client.getMe();
+          console.log("[UserBot] Successfully reconnected existing client, user:", {
+            id: me?.id,
+            username: me?.username,
+            firstName: me?.firstName
+          });
+          clientInstance.lastUsed = Date.now();
+          clientInstance.connected = true;
+          return clientInstance.client;
+        } catch (error) {
+          console.error("[UserBot] Failed to reconnect existing client:", error);
+          // If reconnection fails, proceed to create new client
+        }
+      }
+    }
+
+    // Create new client
+    console.log("[UserBot] Creating new client instance");
+    const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
+    const apiHash = process.env.TELEGRAM_API_HASH;
+
+    if (!apiId || !apiHash) {
+      throw new Error("Telegram API credentials are required");
+    }
+
+    console.log("[UserBot] Initializing with credentials:", {
+      apiId: apiId,
+      hasApiHash: !!apiHash,
+      sessionLength: session.length
+    });
+
+    const stringSession = new StringSession(session);
+    const client = new TelegramClient(stringSession, apiId, apiHash, {
+      connectionRetries: 5,
+      useWSS: false,
+      deviceModel: "Desktop",
+      systemVersion: "Windows 10",
+      appVersion: "1.0.0",
+      baseLogger: console
+    });
+
+    console.log("[UserBot] Connecting new client");
+    await client.connect();
+    console.log("[UserBot] Successfully connected new client");
+
+    // Test the connection by getting account info
+    try {
+      const me = await client.getMe();
+      console.log("[UserBot] Successfully retrieved account info:", {
+        id: me?.id,
+        username: me?.username,
+        firstName: me?.firstName,
+      });
+
+      // Add additional connection test by fetching dialogs
+      console.log("[UserBot] Testing dialog retrieval...");
+      const dialogs = await client.getDialogs({
+        limit: 1
+      });
+      console.log("[UserBot] Successfully retrieved test dialog:", {
+        dialogCount: dialogs.length,
+        firstDialog: dialogs[0] ? {
+          name: dialogs[0].name,
+          type: dialogs[0].entity?.className
+        } : 'No dialogs found'
+      });
+
+    } catch (error) {
+      console.error("[UserBot] Failed to get account info or test dialogs:", error);
+      throw error;
+    }
+
+    // Store the new client instance
+    clientInstance.client = client;
+    clientInstance.session = session;
+    clientInstance.lastUsed = Date.now();
+    clientInstance.connected = true;
+
+    return client;
+  } catch (error) {
+    console.error("[UserBot] Error in getOrCreateClient:", error);
+    throw error;
+  }
+}
+
 // Check connection and broadcast status
 async function checkAndBroadcastStatus() {
   try {
@@ -53,8 +168,8 @@ async function checkAndBroadcastStatus() {
             type: 'status',
             connected: true,
             user: {
-              id: me?.id?.toString(),
-              username: me?.username,
+              id: me?.id?.toString() || '',
+              username: me?.username || '',
               firstName: me?.firstName
             },
             lastChecked: new Date().toISOString()
@@ -96,98 +211,6 @@ async function checkAndBroadcastStatus() {
 
 // Start periodic status checks
 setInterval(checkAndBroadcastStatus, CONNECTION_CHECK_INTERVAL);
-
-export async function getOrCreateClient(session: string): Promise<TelegramClient> {
-  try {
-    console.log("[UserBot] Client instance state:", {
-      hasClient: !!clientInstance.client,
-      currentSession: clientInstance.session?.slice(0, 10) + "...",
-      newSession: session.slice(0, 10) + "...",
-      lastUsed: new Date(clientInstance.lastUsed).toISOString(),
-      connected: clientInstance.connected
-    });
-
-    // If we already have a client with the same session, reuse it
-    if (clientInstance.client && clientInstance.session === session) {
-      // Check if the client is still connected
-      console.log("[UserBot] Checking existing client connection");
-      try {
-        const me = await clientInstance.client.getMe();
-        console.log("[UserBot] Existing client is connected, user:", {
-          id: me?.id,
-          username: me?.username
-        });
-        clientInstance.lastUsed = Date.now();
-        clientInstance.connected = true;
-        return clientInstance.client;
-      } catch (error) {
-        console.log("[UserBot] Existing client check failed, reconnecting:", error);
-        // If check fails, try to reconnect
-        try {
-          console.log("[UserBot] Attempting to reconnect existing client");
-          await clientInstance.client.connect();
-          const me = await clientInstance.client.getMe();
-          console.log("[UserBot] Successfully reconnected existing client, user:", {
-            id: me?.id,
-            username: me?.username
-          });
-          clientInstance.lastUsed = Date.now();
-          clientInstance.connected = true;
-          return clientInstance.client;
-        } catch (error) {
-          console.error("[UserBot] Failed to reconnect existing client:", error);
-          // If reconnection fails, proceed to create new client
-        }
-      }
-    }
-
-    // Create new client
-    console.log("[UserBot] Creating new client instance");
-    const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
-    const apiHash = process.env.TELEGRAM_API_HASH;
-
-    if (!apiId || !apiHash) {
-      throw new Error("Telegram API credentials are required");
-    }
-
-    const stringSession = new StringSession(session);
-    const client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 5,
-      useWSS: false,
-      deviceModel: "Desktop",
-      systemVersion: "Windows 10",
-      appVersion: "1.0.0",
-    });
-
-    console.log("[UserBot] Connecting new client");
-    await client.connect();
-    console.log("[UserBot] Successfully connected new client");
-
-    // Test the connection by getting account info
-    try {
-      const me = await client.getMe();
-      console.log("[UserBot] Successfully retrieved account info:", {
-        id: me?.id,
-        username: me?.username,
-        firstName: me?.firstName,
-      });
-    } catch (error) {
-      console.error("[UserBot] Failed to get account info:", error);
-      throw error;
-    }
-
-    // Store the new client instance
-    clientInstance.client = client;
-    clientInstance.session = session;
-    clientInstance.lastUsed = Date.now();
-    clientInstance.connected = true;
-
-    return client;
-  } catch (error) {
-    console.error("[UserBot] Error in getOrCreateClient:", error);
-    throw error;
-  }
-}
 
 export async function disconnectClient(): Promise<void> {
   if (clientInstance.client) {

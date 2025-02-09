@@ -2,62 +2,7 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { computeCheck } from "telegram/Password";
-
-let client: TelegramClient | null = null;
-
-async function cleanupExistingClient() {
-  if (client) {
-    try {
-      console.log("[Userbot] Cleaning up existing client");
-      if (client.connected) {
-        await client.disconnect();
-      }
-      await client.destroy();
-      client = null;
-    } catch (error) {
-      console.error("[Userbot] Error during cleanup:", error);
-    }
-  }
-}
-
-export async function initializeUserbot() {
-  try {
-    await cleanupExistingClient();
-
-    const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
-    const apiHash = process.env.TELEGRAM_API_HASH;
-
-    console.log("[Userbot] Initializing with API ID:", apiId);
-
-    if (!apiId || !apiHash) {
-      console.error("[Userbot] Missing API credentials:", { apiId: !!apiId, apiHash: !!apiHash });
-      throw new Error("Telegram API credentials are required");
-    }
-
-    const stringSession = new StringSession("");
-    console.log("[Userbot] Creating new TelegramClient instance");
-
-    client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 5,
-      useWSS: false,
-      deviceModel: "Desktop",
-      systemVersion: "Windows 10",
-      appVersion: "1.0.0",
-      baseLogger: {
-        debug: (...args) => console.debug('[TG Debug]', ...args),
-        info: (...args) => console.info('[TG Info]', ...args),
-        warn: (...args) => console.warn('[TG Warn]', ...args),
-        error: (...args) => console.error('[TG Error]', ...args),
-      }
-    });
-
-    console.log("[Userbot] Client instance created successfully");
-    return client;
-  } catch (error: any) {
-    console.error("[Userbot] Failed to initialize client:", error);
-    throw error;
-  }
-}
+import { clientManager } from "./userbot-client";
 
 export async function requestVerificationCode(phoneNumber: string): Promise<string> {
   try {
@@ -67,23 +12,17 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
       throw new Error("Phone number is required");
     }
 
-    // Always cleanup and reinitialize for fresh start
-    await cleanupExistingClient();
-    client = await initializeUserbot();
-
-    console.log("[Userbot] Attempting to connect client");
-    await client.connect();
-    console.log("[Userbot] Client connected successfully");
+    // Get a fresh client instance
+    const client = await clientManager.getClient();
 
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     console.log("[Userbot] Formatted phone number:", formattedPhone);
 
-    console.log("[Userbot] Sending verification code");
     try {
       const result = await client.invoke(new Api.auth.SendCode({
         phoneNumber: formattedPhone,
-        apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
-        apiHash: process.env.TELEGRAM_API_HASH!,
+        apiId: parseInt(process.env.TELEGRAM_API_ID || "", 10),
+        apiHash: process.env.TELEGRAM_API_HASH || "",
         settings: new Api.CodeSettings({
           allowFlashcall: false,
           currentNumber: true,
@@ -99,15 +38,14 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
       console.log("[Userbot] Initial sendCode error:", error.message);
 
       if (error.errorMessage?.includes('AUTH_RESTART')) {
-        console.log("[Userbot] AUTH_RESTART detected, retrying after cleanup");
-        await cleanupExistingClient();
-        client = await initializeUserbot();
-        await client.connect();
+        console.log("[Userbot] AUTH_RESTART detected, retrying with fresh client");
+        await clientManager.cleanup();
 
-        const retryResult = await client.invoke(new Api.auth.SendCode({
+        const newClient = await clientManager.getClient();
+        const retryResult = await newClient.invoke(new Api.auth.SendCode({
           phoneNumber: formattedPhone,
-          apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
-          apiHash: process.env.TELEGRAM_API_HASH!,
+          apiId: parseInt(process.env.TELEGRAM_API_ID || "", 10),
+          apiHash: process.env.TELEGRAM_API_HASH || "",
           settings: new Api.CodeSettings({
             allowFlashcall: false,
             currentNumber: true,
@@ -141,25 +79,13 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
       hashLength: phoneCodeHash?.length
     });
 
-    if (!client) {
-      console.error("[Userbot] Client not initialized for verification");
-      throw new Error("Client not initialized");
-    }
-
     if (!phoneNumber || !code || !phoneCodeHash) {
       throw new Error("Missing required parameters for verification");
     }
 
-    if (!client.connected) {
-      console.log("[Userbot] Connecting client for verification");
-      await client.connect();
-      console.log("[Userbot] Client connected for verification");
-    }
-
+    const client = await clientManager.getClient();
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-    console.log("[Userbot] Formatted phone for verification:", formattedPhone);
 
-    console.log("[Userbot] Attempting to sign in");
     try {
       const signInResult = await client.invoke(new Api.auth.SignIn({
         phoneNumber: formattedPhone,
@@ -194,10 +120,7 @@ export async function verify2FA(password: string): Promise<string> {
   try {
     console.log("[Userbot] Starting 2FA verification");
 
-    if (!client) {
-      throw new Error("Client not initialized");
-    }
-
+    const client = await clientManager.getClient();
     if (!password) {
       throw new Error("2FA password is required");
     }

@@ -3,33 +3,98 @@ import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { Logger, LogLevel } from "telegram/extensions/Logger";
 
-interface ClientInstance {
-  client: TelegramClient | null;
-  session: string | null;
-  lastUsed: number;
-  connected: boolean;
-}
+// Client management singleton
+class TelegramClientManager {
+  private static instance: TelegramClientManager;
+  private client: TelegramClient | null = null;
+  private session: string | null = null;
+  private connected: boolean = false;
+  private logger: CustomLogger;
 
-// Global client instance
-const clientInstance: ClientInstance = {
-  client: null,
-  session: null,
-  lastUsed: 0,
-  connected: false
-};
+  private constructor() {
+    this.logger = new CustomLogger("[TelegramManager]");
+  }
 
-// Connection check interval (30 seconds)
-const CONNECTION_CHECK_INTERVAL = 30 * 1000;
+  public static getInstance(): TelegramClientManager {
+    if (!TelegramClientManager.instance) {
+      TelegramClientManager.instance = new TelegramClientManager();
+    }
+    return TelegramClientManager.instance;
+  }
 
-interface StatusUpdate {
-  type: 'status';
-  connected: boolean;
-  user?: {
-    id: string;
-    username: string;
-    firstName?: string;
-  };
-  lastChecked: string;
+  public async cleanup(): Promise<void> {
+    this.logger.info("Starting client cleanup");
+    if (this.client) {
+      try {
+        if (this.client.connected) {
+          this.logger.info("Disconnecting existing client");
+          await this.client.disconnect();
+        }
+        this.logger.info("Destroying existing client");
+        await this.client.destroy();
+      } catch (error) {
+        this.logger.error(`Error during cleanup: ${error}`);
+      } finally {
+        this.client = null;
+        this.session = null;
+        this.connected = false;
+      }
+    }
+    this.logger.info("Cleanup completed");
+  }
+
+  public async getClient(session?: string): Promise<TelegramClient> {
+    try {
+      // If we have a client and the session matches, reuse it
+      if (this.client && this.session === session) {
+        try {
+          const me = await this.client.getMe();
+          if (me) {
+            this.logger.info("Reusing existing client");
+            return this.client;
+          }
+        } catch (error) {
+          this.logger.warn("Existing client check failed, cleaning up");
+          await this.cleanup();
+        }
+      }
+
+      // If we get here, we need a new client
+      await this.cleanup();
+
+      const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
+      const apiHash = process.env.TELEGRAM_API_HASH;
+
+      if (!apiId || !apiHash) {
+        throw new Error("Telegram API credentials are required");
+      }
+
+      const stringSession = new StringSession(session || "");
+      this.logger.info("Creating new client");
+
+      this.client = new TelegramClient(stringSession, apiId, apiHash, {
+        connectionRetries: 5,
+        useWSS: false,
+        deviceModel: "Desktop",
+        systemVersion: "Windows 10",
+        appVersion: "1.0.0",
+        baseLogger: this.logger,
+      });
+
+      await this.client.connect();
+      this.session = session || null;
+      this.connected = true;
+
+      return this.client;
+    } catch (error) {
+      this.logger.error(`Error in getClient: ${error}`);
+      throw error;
+    }
+  }
+
+  public isConnected(): boolean {
+    return this.connected && this.client !== null;
+  }
 }
 
 // Custom logger implementation
@@ -54,18 +119,18 @@ class CustomLogger implements Logger {
     this._logLevel = level;
   }
 
-  _log(level: LogLevel, message: string): void {
+  log(level: LogLevel, message: string): void {
     if (level >= this._logLevel) {
       const formattedMessage = this.formatLog(level, message);
       switch (level) {
         case LogLevel.DEBUG:
-          console.debug('\x1b[90m' + formattedMessage + '\x1b[0m');
+          console.debug(formattedMessage);
           break;
         case LogLevel.INFO:
-          console.info('\x1b[32m' + formattedMessage + '\x1b[0m');
+          console.info(formattedMessage);
           break;
         case LogLevel.ERROR:
-          console.error('\x1b[31m' + formattedMessage + '\x1b[0m');
+          console.error(formattedMessage);
           break;
         default:
           console.log(formattedMessage);
@@ -73,27 +138,22 @@ class CustomLogger implements Logger {
     }
   }
 
-  log(level: LogLevel, message: string): void {
-    this._log(level, message);
-  }
-
   debug(message: string): void {
-    this._log(LogLevel.DEBUG, message);
+    this.log(LogLevel.DEBUG, message);
   }
 
   info(message: string): void {
-    this._log(LogLevel.INFO, message);
+    this.log(LogLevel.INFO, message);
   }
 
   warn(message: string): void {
-    this._log(LogLevel.ERROR, message);
+    this.log(LogLevel.ERROR, message);
   }
 
   error(message: string): void {
-    this._log(LogLevel.ERROR, message);
+    this.log(LogLevel.ERROR, message);
   }
 
-  // Required by Logger interface
   setLevel(level: LogLevel): void {
     this._logLevel = level;
   }
@@ -114,7 +174,6 @@ class CustomLogger implements Logger {
     return this.formatLog(level, message);
   }
 
-  // Required read-only properties
   readonly tzOffset: number = new Date().getTimezoneOffset() * 60;
   readonly basePath: string = "./logs";
   readonly levels = {
@@ -128,102 +187,16 @@ class CustomLogger implements Logger {
   readonly messageFormat = "[%level] %message";
 }
 
-// Type-safe broadcast status function
-declare global {
-  var broadcastStatus: (status: StatusUpdate) => void;
-}
-
-export async function getOrCreateClient(session: string): Promise<TelegramClient> {
-  const logger = new CustomLogger();
-
-  try {
-    logger.info("Starting client initialization...");
-    logger.debug(`Client instance state: hasClient=${!!clientInstance.client}, connected=${clientInstance.connected}`);
-
-    // If we already have a client with the same session, reuse it
-    if (clientInstance.client && clientInstance.session === session) {
-      logger.info("Found existing client, verifying connection...");
-      try {
-        const me = await clientInstance.client.getMe();
-        if (me) {
-          logger.info(`Existing client is connected for user: ${me.username}`);
-          clientInstance.lastUsed = Date.now();
-          clientInstance.connected = true;
-          return clientInstance.client;
-        }
-      } catch (error) {
-        logger.warn("Existing client check failed, attempting reconnection");
-        try {
-          await clientInstance.client.connect();
-          const me = await clientInstance.client.getMe();
-          if (me) {
-            logger.info(`Successfully reconnected for user: ${me.username}`);
-            clientInstance.lastUsed = Date.now();
-            clientInstance.connected = true;
-            return clientInstance.client;
-          }
-        } catch (reconnectError) {
-          logger.error("Failed to reconnect existing client");
-          // Proceed to create new client
-        }
-      }
-    }
-
-    // Create new client
-    logger.info("Creating new client instance");
-    const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
-    const apiHash = process.env.TELEGRAM_API_HASH;
-
-    if (!apiId || !apiHash) {
-      throw new Error("Telegram API credentials are required");
-    }
-
-    const stringSession = new StringSession(session);
-    const client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 5,
-      useWSS: false,
-      deviceModel: "Desktop",
-      systemVersion: "Windows 10",
-      appVersion: "1.0.0",
-      baseLogger: logger
-    });
-
-    logger.info("Connecting new client");
-    await client.connect();
-
-    // Test the connection
-    const me = await client.getMe();
-    if (!me) {
-      throw new Error("Failed to get user info after connection");
-    }
-
-    logger.info(`Successfully connected for user: ${me.username}`);
-
-    // Test dialog retrieval
-    const dialogs = await client.getDialogs({ limit: 1 });
-    logger.info(`Successfully retrieved ${dialogs.length} test dialog(s)`);
-
-    // Store the new client instance
-    clientInstance.client = client;
-    clientInstance.session = session;
-    clientInstance.lastUsed = Date.now();
-    clientInstance.connected = true;
-
-    return client;
-  } catch (error) {
-    logger.error(`Error in getOrCreateClient: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
-  }
-}
+export const clientManager = TelegramClientManager.getInstance();
 
 // Check connection and broadcast status
 async function checkAndBroadcastStatus() {
   const logger = new CustomLogger();
   try {
-    if (clientInstance.client && clientInstance.connected) {
+    if (clientManager.isConnected()) {
       logger.debug("Checking connection status...");
       try {
-        const me = await clientInstance.client.getMe();
+        const me = await clientManager.getClient().getMe();
         if (me) {
           logger.info(`Connection active for user: ${me.username}`);
           global.broadcastStatus?.({
@@ -236,19 +209,17 @@ async function checkAndBroadcastStatus() {
             },
             lastChecked: new Date().toISOString()
           });
-          clientInstance.connected = true;
         }
       } catch (error) {
         logger.warn("Connection check failed");
-        clientInstance.connected = false;
         global.broadcastStatus?.({
           type: 'status',
           connected: false,
           lastChecked: new Date().toISOString()
         });
       }
-    } else if (clientInstance.client) {
-      logger.warn("Client exists but not connected");
+    } else {
+      logger.warn("Client not connected");
       global.broadcastStatus?.({
         type: 'status',
         connected: false,
@@ -266,20 +237,14 @@ async function checkAndBroadcastStatus() {
 }
 
 // Start periodic status checks
-setInterval(checkAndBroadcastStatus, CONNECTION_CHECK_INTERVAL);
+setInterval(checkAndBroadcastStatus, 30 * 1000);
 
 export async function disconnectClient(): Promise<void> {
   const logger = new CustomLogger();
-  if (clientInstance.client) {
-    try {
-      await clientInstance.client.disconnect();
-      clientInstance.client = null;
-      clientInstance.session = null;
-      clientInstance.connected = false;
-      clientInstance.lastUsed = 0;
-      logger.info("Client disconnected successfully");
-    } catch (error) {
-      logger.error(`Error disconnecting client: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  try {
+    await clientManager.cleanup();
+    logger.info("Client disconnected successfully");
+  } catch (error) {
+    logger.error(`Error disconnecting client: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

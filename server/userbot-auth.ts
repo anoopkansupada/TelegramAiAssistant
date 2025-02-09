@@ -1,6 +1,6 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
-import { storage } from "./storage";
+import { Api } from "telegram/tl";
 
 let client: TelegramClient | null = null;
 
@@ -15,6 +15,10 @@ export async function initializeUserbot() {
   const stringSession = new StringSession("");
   client = new TelegramClient(stringSession, apiId, apiHash, {
     connectionRetries: 5,
+    useWSS: false,
+    deviceModel: "Desktop",
+    systemVersion: "Windows 10",
+    appVersion: "1.0.0",
   });
 
   return client;
@@ -31,13 +35,13 @@ export async function requestVerificationCode(phoneNumber: string) {
     // Format phone number to ensure it starts with '+'
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
-    const result = await client.sendCode({
+    const { phoneCodeHash } = await client.sendCode({
       apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
       apiHash: process.env.TELEGRAM_API_HASH!,
       phoneNumber: formattedPhone,
     });
 
-    return result.phoneCodeHash;
+    return phoneCodeHash;
   } catch (error) {
     console.error("Error sending verification code:", error);
     throw error;
@@ -54,19 +58,18 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
 
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
-    const result = await client.invoke({
-      _: "auth.signIn",
+    const signInResult = await client.signIn({
       phoneNumber: formattedPhone,
       phoneCodeHash,
       phoneCode: code,
     });
 
-    if (result._ === "auth.authorizationSignUpRequired") {
+    if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
       throw new Error("User is not registered on Telegram");
     }
 
-    const session = await client.session.save();
-    return session as string;
+    const session = client.session.save() as string;
+    return session;
   } catch (error) {
     console.error("Error verifying code:", error);
     throw error;

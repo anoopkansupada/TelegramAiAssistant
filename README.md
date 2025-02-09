@@ -89,7 +89,6 @@ npm run dev
 - Error rate monitoring
 
 ## Security Considerations
-
 1. API Key Management
    - Never commit API keys to version control
    - Use environment variables for sensitive data
@@ -101,7 +100,6 @@ npm run dev
    - Monitor for suspicious activities
 
 ## Testing Strategy
-
 1. Unit Testing
    - Component-level tests
    - Service integration tests
@@ -118,7 +116,6 @@ npm run dev
    - Memory leak detection
 
 ## Deployment
-
 1. Development
    - Local development setup
    - Hot reload enabled
@@ -131,7 +128,6 @@ npm run dev
    - Rate limiting enforcement
 
 ## Backup and Recovery
-
 1. Database Backups
    - Automated daily backups
    - Point-in-time recovery
@@ -143,7 +139,6 @@ npm run dev
    - State synchronization
 
 ## Monitoring and Debugging
-
 1. Real-time Connection Status
    - WebSocket-based connection monitoring
    - Telegram session state tracking
@@ -160,7 +155,6 @@ npm run dev
    - Message delivery confirmation
 
 ## Troubleshooting
-
 Common issues and solutions:
 
 1. Connection Issues
@@ -179,7 +173,6 @@ Common issues and solutions:
    - Verify Telegram authentication flow
 
 ## System Requirements
-
 - CPU: 1+ cores
 - RAM: 512MB minimum
 - Storage: 1GB+ available space
@@ -187,7 +180,6 @@ Common issues and solutions:
 - Database: PostgreSQL 12+
 
 ## Development Tools
-
 ### Required Software
 - Node.js and npm
 - PostgreSQL client
@@ -199,7 +191,6 @@ Common issues and solutions:
 - TypeScript and React DevTools
 
 ## Contributing
-
 1. Fork the repository
 2. Create a feature branch
 3. Follow TypeScript best practices
@@ -221,7 +212,6 @@ Common issues and solutions:
 ```
 
 ## Documentation
-
 - [Best Practices Guide](docs/BEST_PRACTICES.md) - Comprehensive development guidelines
 - [API Documentation](docs/API.md) - API endpoints and usage
 - [Database Schema](docs/SCHEMA.md) - Database structure and relationships
@@ -229,7 +219,6 @@ Common issues and solutions:
 - [Compliance Checking](scripts/check-compliance.ts) - Automated best practices verification
 
 ## Development Workflow
-
 1. Follow the [Best Practices Guide](docs/BEST_PRACTICES.md)
 2. Use TypeScript for all new code
 3. Run compliance checks regularly:

@@ -156,7 +156,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listMessages(contactId: number): Promise<Message[]> {
-    return await db.select()
+    return await db
+      .select()
       .from(messages)
       .where(eq(messages.contactId, contactId))
       .orderBy(messages.createdAt);
@@ -223,7 +224,8 @@ export class DatabaseStorage implements IStorage {
     const [newInvitation] = await db.insert(channelInvitations)
       .values({
         ...invitation,
-        createdAt: sql`now()`,
+        currentUses: 0,
+        createdAt: sql`CURRENT_TIMESTAMP`
       })
       .returning();
     return newInvitation;

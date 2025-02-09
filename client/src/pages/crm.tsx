@@ -30,6 +30,9 @@ import {
   Select, SelectContent, SelectItem, 
   SelectTrigger, SelectValue 
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function CRM() {
@@ -126,7 +129,7 @@ export default function CRM() {
                     Add
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Add New Contact</DialogTitle>
                   </DialogHeader>
@@ -134,63 +137,311 @@ export default function CRM() {
                     <form onSubmit={contactForm.handleSubmit(data => 
                       createContactMutation.mutate(data)
                     )} 
-                    className="space-y-4">
-                      <FormField
-                        control={contactForm.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Name</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={contactForm.control}
-                        name="telegramId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Telegram ID</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={contactForm.control}
-                        name="companyId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Company</FormLabel>
-                            <Select 
-                              onValueChange={(value) => field.onChange(parseInt(value))}
-                              value={field.value?.toString()}
-                            >
+                    className="space-y-6">
+                      {/* Basic Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Basic Information</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={contactForm.control}
+                            name="firstName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>First Name</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={contactForm.control}
+                            name="lastName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Last Name</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={contactForm.control}
+                            name="jobTitle"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Job Title</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={contactForm.control}
+                            name="department"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Department</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Contact Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Contact Information</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={contactForm.control}
+                            name="email"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Email</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="email" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={contactForm.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Phone</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="tel" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Social Media */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Social Media</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={contactForm.control}
+                            name="linkedinUrl"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>LinkedIn URL</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={contactForm.control}
+                            name="twitterHandle"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Twitter Handle</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <FormField
+                          control={contactForm.control}
+                          name="facebookUrl"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Facebook URL</FormLabel>
                               <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select company" />
-                                </SelectTrigger>
+                                <Input {...field} />
                               </FormControl>
-                              <SelectContent>
-                                {companies?.map((company) => (
-                                  <SelectItem 
-                                    key={company.id} 
-                                    value={company.id.toString()}
-                                  >
-                                    {company.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {/* Telegram Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Telegram Information</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={contactForm.control}
+                            name="telegramId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Telegram ID</FormLabel>
+                                <FormControl>
+                                  <Input {...field} required />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={contactForm.control}
+                            name="telegramUsername"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Telegram Username</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Communication Preferences */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Communication Preferences</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={contactForm.control}
+                            name="preferredContactMethod"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Preferred Contact Method</FormLabel>
+                                <Select 
+                                  onValueChange={field.onChange}
+                                  value={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select method" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="email">Email</SelectItem>
+                                    <SelectItem value="phone">Phone</SelectItem>
+                                    <SelectItem value="telegram">Telegram</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={contactForm.control}
+                            name="timeZone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Time Zone</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Status and Tags */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Status and Tags</h3>
+                        <FormField
+                          control={contactForm.control}
+                          name="status"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Status</FormLabel>
+                              <Select 
+                                onValueChange={field.onChange}
+                                value={field.value}
+                                defaultValue="active"
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select status" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="active">Active</SelectItem>
+                                  <SelectItem value="inactive">Inactive</SelectItem>
+                                  <SelectItem value="do-not-contact">Do Not Contact</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={contactForm.control}
+                          name="tags"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Tags (comma-separated)</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  onChange={(e) => {
+                                    const tags = e.target.value.split(',').map(tag => tag.trim());
+                                    field.onChange(tags);
+                                  }}
+                                  value={field.value?.join(', ') || ''}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {/* Company Association */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Company</h3>
+                        <FormField
+                          control={contactForm.control}
+                          name="companyId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Company</FormLabel>
+                              <Select 
+                                onValueChange={(value) => field.onChange(parseInt(value))}
+                                value={field.value?.toString()}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select company" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {companies?.map((company) => (
+                                    <SelectItem 
+                                      key={company.id} 
+                                      value={company.id.toString()}
+                                    >
+                                      {company.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
                       <Button 
                         type="submit" 
                         className="w-full"
@@ -215,7 +466,7 @@ export default function CRM() {
                     >
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
-                        {contact.name}
+                        {`${contact.firstName} ${contact.lastName || ''}`}
                       </div>
                       <ChevronRight className="h-4 w-4" />
                     </Button>

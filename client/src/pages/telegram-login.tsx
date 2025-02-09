@@ -13,6 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 const telegramAuthSchema = z.object({
   phoneNumber: z.string().min(1, "Phone number is required"),
   code: z.string().optional(),
+  password: z.string().optional(),
 });
 
 type TelegramAuthForm = z.infer<typeof telegramAuthSchema>;
@@ -21,6 +22,7 @@ export default function TelegramLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [awaitingCode, setAwaitingCode] = useState(false);
+  const [requires2FA, setRequires2FA] = useState(false);
 
   const form = useForm<TelegramAuthForm>({
     resolver: zodResolver(telegramAuthSchema),
@@ -47,7 +49,7 @@ export default function TelegramLogin() {
           title: "Verification code sent",
           description: "Please check your Telegram messages for the code",
         });
-      } else {
+      } else if (!requires2FA) {
         // Second step: Verify code
         const response = await fetch("/api/telegram-auth/verify", {
           method: "POST",
@@ -62,6 +64,39 @@ export default function TelegramLogin() {
 
         if (!response.ok) {
           throw new Error("Invalid verification code");
+        }
+
+        const result = await response.json();
+
+        if (result.requires2FA) {
+          setRequires2FA(true);
+          toast({
+            title: "2FA Required",
+            description: "Please enter your 2FA password",
+          });
+          return;
+        }
+
+        toast({
+          title: "Successfully authenticated",
+          description: "Your Telegram account is now connected!",
+        });
+
+        setLocation("/channels");
+      } else {
+        // Third step: Verify 2FA
+        const response = await fetch("/api/telegram-auth/verify-2fa", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            password: data.password,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Invalid 2FA password");
         }
 
         toast({
@@ -110,7 +145,7 @@ export default function TelegramLogin() {
                 )}
               />
 
-              {awaitingCode && (
+              {awaitingCode && !requires2FA && (
                 <FormField
                   control={form.control}
                   name="code"
@@ -129,14 +164,36 @@ export default function TelegramLogin() {
                 />
               )}
 
+              {requires2FA && (
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>2FA Password</FormLabel>
+                      <FormControl>
+                        <Input 
+                          {...field} 
+                          type="password"
+                          placeholder="Enter your 2FA password"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <Button type="submit" className="w-full">
-                {awaitingCode ? "Verify Code" : "Send Code"}
+                {!awaitingCode ? "Send Code" : requires2FA ? "Verify 2FA" : "Verify Code"}
               </Button>
             </form>
           </Form>
 
           <p className="text-sm text-muted-foreground mt-4 text-center">
-            You'll need to provide your Telegram account's phone number to enable userbot features
+            {requires2FA 
+              ? "Enter your Two-Factor Authentication password"
+              : "You'll need to provide your Telegram account's phone number to enable userbot features"}
           </p>
         </CardContent>
       </Card>

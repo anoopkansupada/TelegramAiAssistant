@@ -125,12 +125,49 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
       console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
 
       return sessionString;
-    } catch (signInError: any) {
-      console.error("[Userbot] Sign in error:", signInError);
-      throw signInError;
+    } catch (error: any) {
+      if (error.errorMessage === 'SESSION_PASSWORD_NEEDED') {
+        console.log("[Userbot] 2FA password required");
+        throw new Error('2FA_REQUIRED');
+      }
+      console.error("[Userbot] Sign in error:", error);
+      throw error;
     }
   } catch (error: any) {
     console.error("[Userbot] Error in verifyCode:", error);
+    console.error("[Userbot] Error details:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    });
+    throw error;
+  }
+}
+
+export async function verify2FA(password: string) {
+  try {
+    console.log("[Userbot] Starting 2FA verification");
+
+    if (!client) {
+      throw new Error("Client not initialized");
+    }
+
+    if (!password) {
+      throw new Error("2FA password is required");
+    }
+
+    console.log("[Userbot] Checking 2FA password");
+    const result = await client.invoke(new Api.auth.CheckPassword({
+      password: await client.computePasswordCheck(password)
+    }));
+
+    console.log("[Userbot] 2FA verification successful");
+    const sessionString = client.session.save() as unknown as string;
+    console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
+
+    return sessionString;
+  } catch (error: any) {
+    console.error("[Userbot] Error in verify2FA:", error);
     console.error("[Userbot] Error details:", {
       name: error.name,
       message: error.message,

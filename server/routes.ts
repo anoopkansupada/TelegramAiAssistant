@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { sendAnnouncement, generateChannelInviteLink, revokeChannelInviteLink } from "./telegram";
-import { requestVerificationCode, verifyCode } from "./userbot-auth";
+import { requestVerificationCode, verifyCode, verify2FA } from "./userbot-auth";
 
 declare module 'express-session' {
   interface SessionData {
@@ -14,7 +14,7 @@ declare module 'express-session' {
     userId?: number;
     isAdmin?: boolean;
     targetChannelIds?: number[];
-
+    requires2FA?: boolean;
   }
 }
 
@@ -212,18 +212,23 @@ export function registerRoutes(app: Express): Server {
         hashLength: phoneCodeHash?.length
       });
 
-      const session = await verifyCode(phoneNumber, code, phoneCodeHash);
+      try {
+        const session = await verifyCode(phoneNumber, code, phoneCodeHash);
+        console.log("[Route] Verification successful, session received:", {
+          length: session?.length
+        });
 
-      console.log("[Route] Verification successful, session received:", {
-        length: session?.length
-      });
-
-      // Store the session
-      req.session.telegramSession = session;
-
-      console.log("[Route] Session stored successfully");
-      res.json({ success: true });
-    } catch (error) {
+        req.session.telegramSession = session;
+        console.log("[Route] Session stored successfully");
+        res.json({ success: true });
+      } catch (error: any) {
+        if (error.message === '2FA_REQUIRED') {
+          req.session.requires2FA = true;
+          return res.json({ requires2FA: true });
+        }
+        throw error;
+      }
+    } catch (error: any) {
       console.error("[Route] Error verifying code:", error);
       console.error("[Route] Error details:", {
         name: error.name,
@@ -232,6 +237,42 @@ export function registerRoutes(app: Express): Server {
       });
       res.status(500).json({
         message: "Failed to verify code",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  app.post("/api/telegram-auth/verify-2fa", async (req, res) => {
+    try {
+      console.log("[Route] Received 2FA verification request");
+
+      if (!req.session.requires2FA) {
+        return res.status(400).json({
+          message: "2FA verification not required"
+        });
+      }
+
+      const { password } = req.body;
+      if (!password) {
+        return res.status(400).json({
+          message: "2FA password is required"
+        });
+      }
+
+      const session = await verify2FA(password);
+      req.session.telegramSession = session;
+      req.session.requires2FA = false;
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Route] Error in 2FA verification:", error);
+      console.error("[Route] Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+      res.status(500).json({
+        message: "Failed to verify 2FA password",
         error: error instanceof Error ? error.message : "Unknown error"
       });
     }

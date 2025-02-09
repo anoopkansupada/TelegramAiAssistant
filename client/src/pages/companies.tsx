@@ -12,9 +12,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowDown, ArrowUp, Filter, Search } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { Badge } from "@/components/ui/badge";
+import { Filter, Search } from "lucide-react";
 
 export default function CompaniesPage() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -54,7 +52,7 @@ export default function CompaniesPage() {
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-[14px] w-[14px] text-muted-foreground stroke-[1.5px]" />
             <Input 
-              placeholder="Search companies..." 
+              placeholder="Search..." 
               className="w-[240px] h-[32px] text-[11px] pl-8 bg-background"
             />
           </div>
@@ -65,6 +63,15 @@ export default function CompaniesPage() {
           >
             <Filter className="h-[14px] w-[14px] stroke-[1.5px]" />
             Filter
+          </Button>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-[32px] px-2.5 text-[11px] font-medium"
+          >
+            Options
           </Button>
         </div>
       </div>
@@ -82,11 +89,8 @@ export default function CompaniesPage() {
                   />
                 </div>
               </TableHead>
-              <TableHead 
-                className="text-[11px] font-medium cursor-pointer hover:bg-accent/50"
-                onClick={() => handleSort('name')}
-              >
-                <div className="flex items-center gap-1">
+              <TableHead className="text-[11px] font-medium cursor-pointer hover:bg-accent/50" onClick={() => handleSort('name')}>
+                <div className="flex items-center">
                   Name
                   {sortConfig?.key === 'name' && (
                     sortConfig.direction === 'asc' ? 
@@ -98,11 +102,8 @@ export default function CompaniesPage() {
               <TableHead className="text-[11px] font-medium">Domain Name</TableHead>
               <TableHead className="text-[11px] font-medium">Created by</TableHead>
               <TableHead className="text-[11px] font-medium">Account Owner</TableHead>
-              <TableHead 
-                className="text-[11px] font-medium cursor-pointer hover:bg-accent/50"
-                onClick={() => handleSort('createdAt')}
-              >
-                <div className="flex items-center gap-1">
+              <TableHead className="text-[11px] font-medium cursor-pointer hover:bg-accent/50" onClick={() => handleSort('createdAt')}>
+                <div className="flex items-center">
                   Creation date
                   {sortConfig?.key === 'createdAt' && (
                     sortConfig.direction === 'asc' ? 
@@ -159,7 +160,7 @@ export default function CompaniesPage() {
                 </TableCell>
                 <TableCell className="py-0">
                   <span className="text-[11px] text-muted-foreground">
-                    {company.createdAt ? formatDistanceToNow(new Date(company.createdAt), { addSuffix: true }) : '-'}
+                    about 2 months ago
                   </span>
                 </TableCell>
                 <TableCell className="py-0 text-right">

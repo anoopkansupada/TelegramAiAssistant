@@ -1,11 +1,26 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
+import { computeCheck } from "telegram/Password";
 
 let client: TelegramClient | null = null;
 
+async function cleanupExistingClient() {
+  if (client) {
+    try {
+      console.log("[Userbot] Cleaning up existing client");
+      await client.disconnect();
+      client = null;
+    } catch (error) {
+      console.error("[Userbot] Error during cleanup:", error);
+    }
+  }
+}
+
 export async function initializeUserbot() {
   try {
+    await cleanupExistingClient();
+
     const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
     const apiHash = process.env.TELEGRAM_API_HASH;
 
@@ -35,7 +50,7 @@ export async function initializeUserbot() {
   }
 }
 
-export async function requestVerificationCode(phoneNumber: string) {
+export async function requestVerificationCode(phoneNumber: string): Promise<string> {
   try {
     console.log("[Userbot] Starting verification code request for phone:", phoneNumber);
 
@@ -43,10 +58,9 @@ export async function requestVerificationCode(phoneNumber: string) {
       throw new Error("Phone number is required");
     }
 
-    if (!client) {
-      console.log("[Userbot] Client not initialized, creating new instance");
-      client = await initializeUserbot();
-    }
+    // Always cleanup and reinitialize for fresh start
+    await cleanupExistingClient();
+    client = await initializeUserbot();
 
     console.log("[Userbot] Attempting to connect client");
     await client.connect();
@@ -56,19 +70,30 @@ export async function requestVerificationCode(phoneNumber: string) {
     console.log("[Userbot] Formatted phone number:", formattedPhone);
 
     console.log("[Userbot] Sending verification code");
-    const result = await client.invoke(new Api.auth.SendCode({
-      phoneNumber: formattedPhone,
-      apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
-      apiHash: process.env.TELEGRAM_API_HASH!,
-      settings: new Api.CodeSettings({
-        allowFlashcall: false,
-        currentNumber: true,
-        allowAppHash: true,
-      })
-    }));
+    try {
+      const { phoneCodeHash } = await client.sendCode({
+        apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
+        apiHash: process.env.TELEGRAM_API_HASH!,
+        phoneNumber: formattedPhone,
+      });
 
-    console.log("[Userbot] Verification code sent successfully, hash received:", result.phoneCodeHash);
-    return result.phoneCodeHash;
+      console.log("[Userbot] Verification code sent successfully");
+      return phoneCodeHash;
+    } catch (error: any) {
+      if (error.errorMessage?.includes('AUTH_RESTART')) {
+        console.log("[Userbot] AUTH_RESTART detected, retrying after cleanup");
+        await cleanupExistingClient();
+        client = await initializeUserbot();
+        await client.connect();
+        const { phoneCodeHash } = await client.sendCode({
+          apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
+          apiHash: process.env.TELEGRAM_API_HASH!,
+          phoneNumber: formattedPhone,
+        });
+        return phoneCodeHash;
+      }
+      throw error;
+    }
   } catch (error: any) {
     console.error("[Userbot] Error in requestVerificationCode:", error);
     console.error("[Userbot] Error details:", {
@@ -80,7 +105,7 @@ export async function requestVerificationCode(phoneNumber: string) {
   }
 }
 
-export async function verifyCode(phoneNumber: string, code: string, phoneCodeHash: string) {
+export async function verifyCode(phoneNumber: string, code: string, phoneCodeHash: string): Promise<string> {
   try {
     console.log("[Userbot] Starting code verification process");
     console.log("[Userbot] Parameters:", {
@@ -107,20 +132,13 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
 
     console.log("[Userbot] Attempting to sign in");
     try {
-      const signInResult = await client.invoke(new Api.auth.SignIn({
+      const signInResult = await client.signIn({
         phoneNumber: formattedPhone,
+        phoneCode: code,
         phoneCodeHash: phoneCodeHash,
-        phoneCode: code
-      }));
+      });
 
-      console.log("[Userbot] Sign in result type:", signInResult?.className);
-
-      if (signInResult.className === 'auth.AuthorizationSignUpRequired') {
-        console.error("[Userbot] User not registered on Telegram");
-        throw new Error("User is not registered on Telegram");
-      }
-
-      console.log("[Userbot] Saving session");
+      console.log("[Userbot] Sign in successful");
       const sessionString = client.session.save() as unknown as string;
       console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
 
@@ -130,7 +148,6 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
         console.log("[Userbot] 2FA password required");
         throw new Error('2FA_REQUIRED');
       }
-      console.error("[Userbot] Sign in error:", error);
       throw error;
     }
   } catch (error: any) {
@@ -144,7 +161,7 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
   }
 }
 
-export async function verify2FA(password: string) {
+export async function verify2FA(password: string): Promise<string> {
   try {
     console.log("[Userbot] Starting 2FA verification");
 
@@ -157,8 +174,9 @@ export async function verify2FA(password: string) {
     }
 
     try {
-      // Simple direct password check using the client's method
-      await client.signIn({ password });
+      const result = await client.signInWithPassword({
+        password: password,
+      });
 
       console.log("[Userbot] 2FA verification successful");
       const sessionString = client.session.save() as unknown as string;

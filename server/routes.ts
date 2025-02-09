@@ -13,6 +13,7 @@ import { clientManager } from "./userbot-client";
 
 declare module 'express-session' {
   interface SessionData {
+    userId?: number;
     telegramSession?: string;
     phoneCodeHash?: string;
     phoneNumber?: string;
@@ -108,9 +109,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/telegram-auth/verify-2fa", async (req, res) => {
     try {
       const { token } = req.body;
+
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "User session not found." });
+      }
+
       const user = await storage.getUserById(req.session.userId);
 
-      if (!user?.twoFactorSecret) {
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+
+      if (!user.twoFactorSecret) {
         return res.status(400).json({ message: "2FA not set up." });
       }
 
@@ -191,16 +201,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      try {
-        const session = await verifyCode(phoneNumber, code, phoneCodeHash);
+      const session = await verifyCode(phoneNumber, code, phoneCodeHash);
 
-        // Update session with new data
-        req.session.telegramSession = session;
+      // Update session with new data
+      req.session.telegramSession = session;
+      req.session.phoneCodeHash = undefined;
+      req.session.phoneNumber = undefined;
+      req.session.codeRequestTime = undefined;
+
+      // Save session
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          resolve();
+        });
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      if (error.message === 'PHONE_CODE_EXPIRED') {
+        // Clear Telegram-related session data
+        req.session.telegramSession = undefined;
         req.session.phoneCodeHash = undefined;
         req.session.phoneNumber = undefined;
+        req.session.requires2FA = undefined;
         req.session.codeRequestTime = undefined;
 
-        // Save session
         await new Promise<void>((resolve, reject) => {
           req.session.save((err) => {
             if (err) reject(err);
@@ -208,41 +234,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         });
 
-        res.json({ success: true });
-      } catch (error: any) {
-        if (error.message === 'PHONE_CODE_EXPIRED') {
-          // Clear Telegram-related session data
-          req.session.telegramSession = undefined;
-          req.session.phoneCodeHash = undefined;
-          req.session.phoneNumber = undefined;
-          req.session.requires2FA = undefined;
-          req.session.codeRequestTime = undefined;
-
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((err) => {
-              if (err) reject(err);
-              resolve();
-            });
-          });
-
-          return res.status(400).json({ 
-            message: "Verification code expired. Please request a new code.",
-            code: "PHONE_CODE_EXPIRED"
-          });
-        }
-
-        if (error.message === 'PHONE_CODE_INVALID') {
-          return res.status(400).json({
-            message: "Invalid verification code. Please try again.",
-            code: "PHONE_CODE_INVALID"
-          });
-        }
-
-        console.error("[Route] Error verifying code:", error);
-        res.status(500).json({
-          message: error.message || "Failed to verify code"
+        return res.status(400).json({ 
+          message: "Verification code expired. Please request a new code.",
+          code: "PHONE_CODE_EXPIRED"
         });
       }
+
+      if (error.message === 'PHONE_CODE_INVALID') {
+        return res.status(400).json({
+          message: "Invalid verification code. Please try again.",
+          code: "PHONE_CODE_INVALID"
+        });
+      }
+
+      console.error("[Route] Error verifying code:", error);
+      res.status(500).json({
+        message: error.message || "Failed to verify code"
+      });
     }
   });
 
@@ -298,12 +306,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Route] Retrieved ${dialogs.length} dialogs`);
       const channels = await Promise.all(dialogs
-        .filter(d => d.isChannel)
+        .filter(d => d.isChannel && d.id !== undefined)
         .map(async (dialog) => {
-          const dbChannel = await storage.getTelegramChannelByTelegramId(dialog.id.toString());
+          const dbChannel = await storage.getTelegramChannelByTelegramId(dialog.id!.toString());
           if (!dbChannel) {
             return storage.createTelegramChannel({
-              telegramId: dialog.id.toString(),
+              telegramId: dialog.id!.toString(),
               name: dialog.name || 'Untitled',
               type: 'channel',
               createdById: req.user!.id,
@@ -352,13 +360,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 2FA Setup
   app.post("/api/2fa-setup", async (req, res) => {
-    const secret = speakeasy.generateSecret({ length: 20 });
-    // Store the secret in the user's record in the database
-    // This is a placeholder, replace with actual database logic
-    const user = await storage.getUserById(req.session.userId);
-    user.twoFactorSecret = secret.base32;
-    await storage.updateUser(user);
-    res.json({ otpauth_url: secret.otpauth_url });
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "User session not found." });
+      }
+
+      const user = await storage.getUserById(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+
+      const secret = speakeasy.generateSecret({ length: 20 });
+      const updatedUser = {
+        ...user,
+        twoFactorSecret: secret.base32
+      };
+
+      await storage.updateUser(updatedUser);
+      res.json({ otpauth_url: secret.otpauth_url });
+    } catch (error: any) {
+      console.error("[Route] Error in 2FA setup:", error);
+      res.status(500).json({ message: "Failed to set up 2FA" });
+    }
   });
 
 

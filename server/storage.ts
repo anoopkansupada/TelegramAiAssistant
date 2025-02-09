@@ -6,7 +6,7 @@ import { InsertUser, User, Contact, Company, Message, Announcement,
          InsertMessage, InsertAnnouncement, InsertTelegramChannel,
          channelInvitations, ChannelInvitation, InsertChannelInvitation,
          TelegramChat, InsertTelegramChat, CompanySuggestion, InsertCompanySuggestion,
-         telegramChats, companySuggestions } from "@shared/schema";
+         telegramChats, companySuggestions, messageSuggestions, InsertMessageSuggestion, MessageSuggestion } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { 
@@ -92,6 +92,10 @@ export interface IStorage {
   getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>;
   updateUser(user: User): Promise<User>;
+
+  // Message Related
+  getRecentMessages(contactId: number, limit: number): Promise<Message[]>;
+  createMessageSuggestions(messageId: number, suggestions: string[]): Promise<MessageSuggestion[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -452,6 +456,27 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, user.id))
       .returning();
     return updatedUser;
+  }
+
+  async getRecentMessages(contactId: number, limit: number): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(eq(messages.contactId, contactId))
+      .orderBy(sql`${messages.createdAt} DESC`)
+      .limit(limit);
+  }
+
+  async createMessageSuggestions(messageId: number, suggestions: string[]): Promise<MessageSuggestion[]> {
+    const suggestionValues = suggestions.map(suggestion => ({
+      messageId,
+      suggestion,
+    }));
+
+    return await db
+      .insert(messageSuggestions)
+      .values(suggestionValues)
+      .returning();
   }
 }
 

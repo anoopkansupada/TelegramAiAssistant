@@ -278,6 +278,19 @@ export const insertInteractionSchema = createInsertSchema(interactions).pick({
   nextSteps: true,
 });
 
+// Add message suggestions table
+export const messageSuggestions = pgTable("message_suggestions", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull(),
+  suggestion: text("suggestion").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertMessageSuggestionSchema = createInsertSchema(messageSuggestions).pick({
+  messageId: true,
+  suggestion: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -289,6 +302,7 @@ export type InsertTelegramChat = z.infer<typeof insertTelegramChatSchema>;
 export type InsertCompanySuggestion = z.infer<typeof insertCompanySuggestionSchema>;
 export type InsertFollowupSchedule = z.infer<typeof insertFollowupScheduleSchema>;
 export type InsertInteraction = z.infer<typeof insertInteractionSchema>;
+export type InsertMessageSuggestion = z.infer<typeof insertMessageSuggestionSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
@@ -301,3 +315,4 @@ export type TelegramChat = typeof telegramChats.$inferSelect;
 export type CompanySuggestion = typeof companySuggestions.$inferSelect;
 export type FollowupSchedule = typeof followupSchedules.$inferSelect;
 export type Interaction = typeof interactions.$inferSelect;
+export type MessageSuggestion = typeof messageSuggestions.$inferSelect;

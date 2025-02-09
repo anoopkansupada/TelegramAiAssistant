@@ -11,7 +11,7 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
 
 export const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
-// Update message handling to include suggestion generation
+// Update the message handling to use optional chaining and type-safe access
 bot.on("message", async (ctx) => {
   if (!ctx.message || !('text' in ctx.message)) return;
 
@@ -42,6 +42,14 @@ bot.on("message", async (ctx) => {
   // Generate suggestions for response
   try {
     const previousMessages = await storage.getRecentMessages(contact.id, 5);
+
+    // Prepare contact info with proper type safety
+    const contactInfo = {
+      name: `${contact.firstName} ${contact.lastName || ''}`.trim() || undefined,
+      jobTitle: contact.jobTitle || undefined,
+      company: contact.companyId ? 'Unknown Company' : undefined // Fix: Changed companyName to company
+    };
+
     const suggestions = await generateResponseSuggestions(
       ctx.message.text,
       {
@@ -49,16 +57,12 @@ bot.on("message", async (ctx) => {
           role: 'user',
           content: msg.content
         })),
-        contactInfo: {
-          name: `${contact.firstName} ${contact.lastName || ''}`.trim(),
-          company: contact.company?.name,
-          jobTitle: contact.jobTitle
-        }
+        contactInfo
       }
     );
 
-    // Store suggestions for this message
-    if (suggestions.length > 0) {
+    // Store suggestions only if we have valid ones
+    if (suggestions && suggestions.length > 0) {
       await storage.createMessageSuggestions(message.id, suggestions);
     }
   } catch (error) {

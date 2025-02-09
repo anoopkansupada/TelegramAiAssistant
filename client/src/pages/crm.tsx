@@ -500,20 +500,263 @@ export default function CRM() {
                     <form onSubmit={companyForm.handleSubmit(data => 
                       createCompanyMutation.mutate(data)
                     )} 
-                    className="space-y-4">
-                      <FormField
-                        control={companyForm.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Company Name</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                    className="space-y-6">
+                      {/* Basic Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Basic Information</h3>
+                        <FormField
+                          control={companyForm.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Company Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={companyForm.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Description</FormLabel>
+                              <FormControl>
+                                <Textarea {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {/* Contact Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Contact Information</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={companyForm.control}
+                            name="email"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Email</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="email" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={companyForm.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Phone</FormLabel>
+                                <FormControl>
+                                  <Input {...field} type="tel" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <FormField
+                          control={companyForm.control}
+                          name="website"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Website</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="url" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {/* Location */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Location</h3>
+                        <FormField
+                          control={companyForm.control}
+                          name="address"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Address</FormLabel>
+                              <FormControl>
+                                <Textarea {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={companyForm.control}
+                            name="city"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>City</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={companyForm.control}
+                            name="country"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Country</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Social Media */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Social Media</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={companyForm.control}
+                            name="linkedinUrl"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>LinkedIn URL</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={companyForm.control}
+                            name="twitterHandle"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Twitter Handle</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Additional Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Additional Information</h3>
+                        <FormField
+                          control={companyForm.control}
+                          name="industry"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Industry</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={companyForm.control}
+                            name="size"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Company Size</FormLabel>
+                                <Select 
+                                  onValueChange={field.onChange}
+                                  value={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select size" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="1-10">1-10 employees</SelectItem>
+                                    <SelectItem value="11-50">11-50 employees</SelectItem>
+                                    <SelectItem value="51-200">51-200 employees</SelectItem>
+                                    <SelectItem value="201-500">201-500 employees</SelectItem>
+                                    <SelectItem value="501-1000">501-1000 employees</SelectItem>
+                                    <SelectItem value="1000+">1000+ employees</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={companyForm.control}
+                            name="revenue"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Annual Revenue</FormLabel>
+                                <Select 
+                                  onValueChange={field.onChange}
+                                  value={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select revenue" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="<1M">Less than $1M</SelectItem>
+                                    <SelectItem value="1M-10M">$1M - $10M</SelectItem>
+                                    <SelectItem value="10M-50M">$10M - $50M</SelectItem>
+                                    <SelectItem value="50M-100M">$50M - $100M</SelectItem>
+                                    <SelectItem value="100M+">$100M+</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Tags</h3>
+                        <FormField
+                          control={companyForm.control}
+                          name="tags"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Tags (comma-separated)</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  onChange={(e) => {
+                                    const tags = e.target.value.split(',').map(tag => tag.trim());
+                                    field.onChange(tags);
+                                  }}
+                                  value={field.value?.join(', ') || ''}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
                       <Button 
                         type="submit" 
                         className="w-full"
@@ -528,20 +771,44 @@ export default function CRM() {
             </CardHeader>
             <CardContent>
               {companies && companies.length > 0 ? (
-                <div className="space-y-2">
-                  {companies.map((company) => (
-                    <div
-                      key={company.id}
-                      className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
-                    >
-                      <Building2 className="h-4 w-4" />
-                      <span>{company.name}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No companies yet</p>
-              )}
+                      <div className="space-y-4">
+                        {companies.map((company) => (
+                          <div
+                            key={company.id}
+                            className="p-4 rounded-lg border hover:border-primary transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-5 w-5 text-primary" />
+                                <h3 className="font-medium">{company.name}</h3>
+                              </div>
+                              {company.industry && (
+                                <Badge variant="secondary">{company.industry}</Badge>
+                              )}
+                            </div>
+                            {company.description && (
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {company.description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {company.tags?.map((tag) => (
+                                <Badge key={tag} variant="outline">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                            {(company.city || company.country) && (
+                              <p className="text-sm text-muted-foreground mt-2">
+                                📍 {[company.city, company.country].filter(Boolean).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No companies yet</p>
+                    )}
             </CardContent>
           </Card>
 

@@ -1,0 +1,58 @@
+To emulate the data collection approach of Twenty’s CRM, it’s essential to capture comprehensive and structured information for both companies and contacts. This ensures a holistic view of customer relationships and potential opportunities. Below is a detailed breakdown of the recommended data points to collect:
+
+1. Companies:
+	•	Basic Information:
+	•	Company Name: The official name of the organization.
+	•	Industry: Sector or market the company operates in.
+	•	Size: Number of employees or scale of operations.
+	•	Location: Headquarters address or primary operating regions.
+	•	Contact Details:
+	•	Phone Number: Main contact number.
+	•	Email Address: General or department-specific email.
+	•	Website: Company’s official website URL.
+	•	Social Media Profiles:
+	•	LinkedIn: Company’s LinkedIn page.
+	•	Twitter: Official Twitter handle.
+	•	Facebook: Facebook page link.
+	•	Other Relevant Platforms: Industry-specific platforms or additional social media profiles.
+	•	Financial Information:
+	•	Annual Revenue: Estimated or reported yearly earnings.
+	•	Funding Rounds: Details of any venture capital or funding received.
+	•	Associated Opportunities:
+	•	Opportunity Name: Title or brief description of the potential deal.
+	•	Deal Value: Monetary value associated with the opportunity.
+	•	Stage: Current phase in the sales pipeline (e.g., Prospecting, Negotiation, Closed).
+	•	Expected Close Date: Anticipated date for deal closure.
+
+2. Contacts (People):
+	•	Personal Information:
+	•	Full Name: First and last names.
+	•	Job Title: Current position within the company.
+	•	Department: Specific department or division.
+	•	Contact Details:
+	•	Phone Number: Direct or mobile number.
+	•	Email Address: Professional email.
+	•	LinkedIn Profile: URL to LinkedIn profile.
+	•	Twitter Handle: Personal or professional Twitter account.
+	•	Interaction History:
+	•	Meeting Notes: Summaries or minutes from past meetings.
+	•	Emails: Logged communications.
+	•	Call Logs: Records of phone interactions.
+	•	Telegram Chats: Archived messages and discussions.
+	•	Tasks and Reminders:
+	•	Follow-Up Tasks: Scheduled actions or to-dos.
+	•	Reminders: Alerts for upcoming meetings, deadlines, or follow-ups.
+
+3. Interaction Tracking:
+	•	Notes:
+	•	Detailed entries capturing the context and content of interactions, displayed in a chronological timeline.
+	•	Tasks:
+	•	Action items linked to specific contacts or companies, with due dates and statuses.
+
+4. Customization and Flexibility:
+	•	Custom Fields:
+	•	Ability to add organization-specific fields to capture unique data points.
+	•	Data Model Adaptability:
+	•	Tailoring the CRM’s data structure to align with specific business processes and requirements.
+
+By systematically collecting and organizing these data points, your CRM will provide a robust framework to manage customer relationships effectively, mirroring the comprehensive capabilities of Twenty’s open-source CRM system.

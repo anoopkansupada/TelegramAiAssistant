@@ -56,17 +56,17 @@ export class ComplianceChecker {
   async checkDocumentation(): Promise<{ passed: boolean; issues: string[] }> {
     const issues: string[] = [];
     const requiredDocs = ['BEST_PRACTICES.md', 'API.md', 'SCHEMA.md'];
-    
+
     try {
       const docsPath = path.join(this.basePath, 'docs');
       const docs = fs.existsSync(docsPath) ? fs.readdirSync(docsPath) : [];
-      
+
       for (const doc of requiredDocs) {
         if (!docs.includes(doc)) {
           issues.push(`Missing required documentation: ${doc}`);
         }
       }
-      
+
       return {
         passed: issues.length === 0,
         issues,
@@ -82,7 +82,7 @@ export class ComplianceChecker {
   // Check for security best practices
   async checkSecurityPractices(): Promise<{ passed: boolean; issues: string[] }> {
     const issues: string[] = [];
-    
+
     try {
       // Check for environment variables usage
       const envPath = path.join(this.basePath, '.env');
@@ -91,12 +91,25 @@ export class ComplianceChecker {
       }
 
       // Check server configuration
-      const serverIndexPath = path.join(this.basePath, 'server', 'index.ts');
-      if (fs.existsSync(serverIndexPath)) {
-        const serverContent = fs.readFileSync(serverIndexPath, 'utf-8');
-        if (!serverContent.includes('express-session')) {
-          issues.push('Missing session middleware in server configuration');
-        }
+      const authPath = path.join(this.basePath, 'server', 'auth.ts');
+      const indexPath = path.join(this.basePath, 'server', 'index.ts');
+
+      if (!fs.existsSync(authPath) || !fs.existsSync(indexPath)) {
+        issues.push('Missing server authentication configuration files');
+        return { passed: false, issues };
+      }
+
+      const authContent = fs.readFileSync(authPath, 'utf-8');
+      const indexContent = fs.readFileSync(indexPath, 'utf-8');
+
+      // Check for session middleware setup in auth.ts
+      if (!authContent.includes('express-session')) {
+        issues.push('Missing session middleware import in auth configuration');
+      }
+
+      // Check for auth setup in index.ts
+      if (!indexContent.includes('setupAuth(app)')) {
+        issues.push('Missing auth setup in server configuration');
       }
 
       return {

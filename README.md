@@ -1,12 +1,3 @@
-# Telegram CRM Platform
-
-A comprehensive CRM platform integrated with Telegram for intelligent customer relationship management.
-
-## Quick Start
-
-1. Clone this repository
-2. Install dependencies:
-```bash
 npm install
 ```
 3. Set up environment variables (see Environment Setup below)
@@ -20,6 +11,7 @@ npm run dev
 - [Best Practices Guide](docs/BEST_PRACTICES.md) - Comprehensive development guidelines
 - [API Documentation](docs/API.md) - API endpoints and usage
 - [Database Schema](docs/SCHEMA.md) - Database structure and relationships
+- [Compliance Checking](scripts/check-compliance.ts) - Automated best practices verification
 
 ## Environment Setup
 
@@ -32,16 +24,18 @@ Required environment variables:
 
 1. Follow the [Best Practices Guide](docs/BEST_PRACTICES.md)
 2. Use TypeScript for all new code
-3. Implement proper error handling
-4. Add necessary documentation
-5. Test thoroughly before deployment
+3. Run compliance checks regularly:
+   ```bash
+   npm run check-compliance
+   ```
+4. Implement proper error handling
+5. Add necessary documentation
+6. Test thoroughly before deployment
 
-## Need Help?
-
-- Review the [Best Practices Guide](docs/BEST_PRACTICES.md)
-- Check the [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
-- Contact the development team
-
-## License
-
-MIT
+## Project Structure
+```
+├── client/          # React frontend
+├── server/          # Express backend
+├── shared/          # Shared types and utilities
+├── docs/            # Documentation
+└── scripts/         # Utility scripts

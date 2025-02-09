@@ -12,6 +12,7 @@ import {
   LogOut,
   Plus,
   Share2,
+  Bot,
 } from "lucide-react";
 import {
   Message,
@@ -138,6 +139,20 @@ export default function Dashboard() {
             </Card>
           </Link>
 
+          <Link href="/telegram-login">
+            <Card className="hover:border-primary cursor-pointer transition-colors">
+              <CardContent className="flex items-center gap-4 pt-6">
+                <Bot className="h-8 w-8 text-primary" />
+                <div>
+                  <h2 className="text-lg font-semibold">Telegram Auth</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Connect your Telegram account
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
           <Link href="/channels">
             <Card className="hover:border-primary cursor-pointer transition-colors">
               <CardContent className="flex items-center gap-4 pt-6">
@@ -145,24 +160,12 @@ export default function Dashboard() {
                 <div>
                   <h2 className="text-lg font-semibold">Channels</h2>
                   <p className="text-sm text-muted-foreground">
-                    View connected Telegram channels
+                    Manage Telegram channels
                   </p>
                 </div>
               </CardContent>
             </Card>
           </Link>
-
-          <Card>
-            <CardContent className="flex items-center gap-4 pt-6">
-              <PieChart className="h-8 w-8 text-primary" />
-              <div>
-                <h2 className="text-lg font-semibold">Analytics</h2>
-                <p className="text-sm text-muted-foreground">
-                  View message sentiment and trends
-                </p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Stats Grid */}

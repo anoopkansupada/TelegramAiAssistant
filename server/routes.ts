@@ -334,13 +334,20 @@ export function registerRoutes(app: Express): Server {
     try {
       const telegramSession = req.session.telegramSession;
       if (!telegramSession) {
+        console.log("[Route] No telegram session found in request");
         return res.status(401).json({ message: "Telegram authentication required" });
       }
 
       console.log("[Route] Getting or creating client for session");
       const client = await getOrCreateClient(telegramSession);
 
-      console.log("[Route] Starting to fetch dialogs");
+      console.log("[Route] Starting to fetch dialogs with parameters:", {
+        limit: 100,
+        offsetDate: 0,
+        offsetId: 0,
+        offsetPeer: "me"
+      });
+
       const dialogs = await client.getDialogs({
         limit: 100, // Increased limit to get more chats
         offsetDate: 0, // Start from the most recent
@@ -348,81 +355,118 @@ export function registerRoutes(app: Express): Server {
         offsetPeer: "me", // Start from our own peer
       });
 
-      console.log(`[Route] Found ${dialogs.length} dialogs`);
+      console.log(`[Route] Successfully fetched ${dialogs.length} dialogs`);
 
-      // Log each dialog's details for debugging
+      // Detailed logging for each dialog
       dialogs.forEach((dialog, index) => {
-        console.log(`[Route] Dialog ${index + 1}:`, {
+        console.log(`[Route] Dialog ${index + 1} details:`, {
           name: dialog.name,
           isChannel: dialog.isChannel,
           isGroup: dialog.isGroup,
           isUser: dialog.isUser,
-          entity: {
-            className: dialog.entity?.className,
-            id: dialog.entity?.id,
-            accessHash: dialog.entity?.accessHash?.toString(),
-          },
+          entity: dialog.entity ? {
+            className: dialog.entity.className,
+            id: dialog.entity.id,
+            type: dialog.entity.constructor.name,
+            hasAccessHash: !!dialog.entity.accessHash,
+          } : 'No entity',
           unreadCount: dialog.unreadCount,
-          date: dialog.date ? new Date(dialog.date * 1000).toISOString() : null
+          date: dialog.date ? new Date(dialog.date * 1000).toISOString() : null,
+          hasMessage: !!dialog.message,
+          peer: dialog.peer ? {
+            className: dialog.peer.className,
+            id: dialog.peer.id
+          } : 'No peer'
         });
       });
 
-      // Process and store each chat
-      const chats = await Promise.all(
-        dialogs.map(async (dialog) => {
+      // Process and store each chat with validation
+      const processResults = await Promise.all(
+        dialogs.map(async (dialog, index) => {
           const chat = dialog.entity;
           if (!chat) {
-            console.log(`[Route] Skipping dialog - no entity:`, dialog);
-            return null;
+            console.log(`[Route] Skipping dialog ${index} - no entity:`, dialog);
+            return { success: false, reason: 'no_entity' };
           }
 
-          console.log(`[Route] Processing chat:`, {
-            id: chat.id,
-            className: chat.className,
-            name: dialog.name,
-            isChannel: dialog.isChannel,
-            isGroup: dialog.isGroup,
-            isUser: dialog.isUser
-          });
+          try {
+            console.log(`[Route] Processing chat ${index}:`, {
+              id: chat.id,
+              className: chat.className,
+              name: dialog.name,
+              isChannel: dialog.isChannel,
+              isGroup: dialog.isGroup,
+              isUser: dialog.isUser
+            });
 
-          // Get or create chat in database
-          let dbChat = await storage.getTelegramChatByTelegramId(chat.id.toString());
+            // Get or create chat in database
+            let dbChat = await storage.getTelegramChatByTelegramId(chat.id.toString());
+            console.log(`[Route] Database lookup for chat ${chat.id}:`, {
+              found: !!dbChat,
+              existingId: dbChat?.id
+            });
 
-          if (!dbChat) {
-            console.log(`[Route] Creating new chat record for ${chat.id}`);
-            dbChat = await storage.createTelegramChat({
-              telegramId: chat.id.toString(),
-              title: dialog.name || 'Untitled',
-              type: chat.className.toLowerCase(),
-              status: 'pending',
-              unreadCount: dialog.unreadCount || 0,
-              lastMessageAt: dialog.date ? new Date(dialog.date * 1000) : new Date(),
-              metadata: {
-                participantsCount: dialog.isChannel || dialog.isGroup ? -1 : 2, // Default to 2 for private chats
+            if (!dbChat) {
+              console.log(`[Route] Creating new chat record for ${chat.id}`);
+              dbChat = await storage.createTelegramChat({
+                telegramId: chat.id.toString(),
+                title: dialog.name || 'Untitled',
+                type: chat.className.toLowerCase(),
+                status: 'pending',
+                unreadCount: dialog.unreadCount || 0,
+                lastMessageAt: dialog.date ? new Date(dialog.date * 1000) : new Date(),
+                metadata: {
+                  participantsCount: dialog.isChannel || dialog.isGroup ? -1 : 2,
+                  isChannel: dialog.isChannel,
+                  isGroup: dialog.isGroup,
+                  isUser: dialog.isUser,
+                  accessHash: chat.accessHash?.toString(),
+                },
+                createdById: req.user!.id,
+              });
+              console.log(`[Route] Successfully created chat record:`, {
+                id: dbChat.id,
+                telegramId: dbChat.telegramId,
+                type: dbChat.type
+              });
+            } else {
+              console.log(`[Route] Updating existing chat record for ${chat.id}`);
+              dbChat = await storage.updateTelegramChatMetadata(dbChat.id, {
+                participantsCount: dialog.isChannel || dialog.isGroup ? -1 : 2,
                 isChannel: dialog.isChannel,
                 isGroup: dialog.isGroup,
                 isUser: dialog.isUser,
                 accessHash: chat.accessHash?.toString(),
-              },
-              createdById: req.user!.id,
-            });
-          } else {
-            console.log(`[Route] Updating existing chat record for ${chat.id}`);
-            dbChat = await storage.updateTelegramChatMetadata(dbChat.id, {
-              participantsCount: dialog.isChannel || dialog.isGroup ? -1 : 2,
-              isChannel: dialog.isChannel,
-              isGroup: dialog.isGroup,
-              isUser: dialog.isUser,
-              accessHash: chat.accessHash?.toString(),
-            });
-          }
+              });
+              console.log(`[Route] Successfully updated chat record:`, {
+                id: dbChat.id,
+                telegramId: dbChat.telegramId,
+                type: dbChat.type
+              });
+            }
 
-          return dbChat;
+            return { success: true, chat: dbChat };
+          } catch (error) {
+            console.error(`[Route] Error processing chat ${index}:`, error);
+            return { success: false, reason: 'processing_error', error };
+          }
         })
       );
 
-      // Filter out null values and send response
-      const validChats = chats.filter(chat => chat !== null);
+      // Analyze results
+      const successCount = processResults.filter(r => r.success).length;
+      const failureCount = processResults.filter(r => !r.success).length;
+      console.log(`[Route] Chat processing summary:`, {
+        total: processResults.length,
+        successful: successCount,
+        failed: failureCount
+      });
+
+      // Filter out successful results and return
+      const validChats = processResults
+        .filter((result): result is { success: true, chat: any } => result.success)
+        .map(result => result.chat);
+
       console.log(`[Route] Returning ${validChats.length} valid chats`);
       console.log("[Route] Chat summary:", validChats.map(c => ({
         id: c.id,
@@ -441,7 +485,10 @@ export function registerRoutes(app: Express): Server {
         message: error.message,
         stack: error.stack
       } : error);
-      res.status(500).json({ message: "Failed to list chats" });
+      res.status(500).json({ 
+        message: "Failed to list chats",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

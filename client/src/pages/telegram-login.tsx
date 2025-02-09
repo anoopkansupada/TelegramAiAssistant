@@ -46,10 +46,22 @@ export default function TelegramLogin() {
       console.log("Fetching Telegram chats...");
       const response = await fetch('/api/telegram-chats');
       if (!response.ok) {
-        throw new Error('Failed to fetch chats');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch chats');
       }
       const data = await response.json();
-      console.log("Received chats:", data);
+      console.log("Received chats:", {
+        count: data.length,
+        types: data.reduce((acc: Record<string, number>, chat: any) => {
+          acc[chat.type] = (acc[chat.type] || 0) + 1;
+          return acc;
+        }, {}),
+        sample: data.slice(0, 3).map((c: any) => ({
+          id: c.id,
+          title: c.title,
+          type: c.type
+        }))
+      });
     } catch (error) {
       console.error("Error fetching chats:", error);
       toast({

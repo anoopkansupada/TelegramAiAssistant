@@ -1,4 +1,5 @@
-import type { Express } from "express";
+iimport * as speakeasy from 'speakeasy';
+mport type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from 'ws';
 import { setupAuth } from "./auth";
@@ -69,28 +70,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => {
           if (err) reject(err);
-          resolve();
-        });
-      });
 
-      const phoneCodeHash = await requestVerificationCode(phoneNumber);
+          // Check if 2FA is required
+          const user = await storage.getUserByPhoneNumber(phoneNumber);
+          if (user && user.twoFactorSecret) {
+            // Redirect to 2FA validation route
+            return res.redirect("/api/telegram-auth/verify-2fa");
+          }
 
-      // Set new session data
-      req.session.phoneCodeHash = phoneCodeHash;
-      req.session.phoneNumber = phoneNumber;
-      req.session.codeRequestTime = Date.now();
-
-      // Save session
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) reject(err);
-          resolve();
-        });
-      });
-
-      res.json({ 
-        success: true,
-        message: "Verification code sent. Please enter it within 2 minutes." 
+          
+resolve,();
+      ge: "Verification code sent. Please enter it within 2 minutes" 
       });
     } catch (error: any) {
       console.error("[Route] Error requesting verification code:", error);
@@ -99,7 +89,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({
           message: "Please try requesting the code again",
           code: "AUTH_RESTART"
+    
+
+        // 2FA Validation
+        app.post("/api/telegram-auth/verify-2fa", async (req, res) => {
+          const { token } = req.body;
+          const user = await storage.getUserById(req.session.userId);
+          if (!user.twoFactorSecret) {
+            return res.status(400).json({ message: "2FA not set up." });
+          }
+          const verified = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: "base32",
+            token,
+          });
+          if (verified) {
+            req.session.is2FAAuthenticated = true;
+            await new Promise<void>((resolve, reject) => {
+              req.session.save((err) => {)
+                if (err) reject(err);
+                resolve();
+              });
+            });
+            res.json({ success: true, message: "2FA verified successfully." });
+          } else {
+            res.status(401).json({ message: "Invalid 2FA code." });
+          }
         });
+});
       }
 
       res.status(500).json({
@@ -208,21 +225,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        if (error.message === '2FA_REQUIRED') {
-          req.session.requires2FA = true;
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((err) => {
-              if (err) reject(err);
-              resolve();
-            });
-          });
-          return res.json({ requires2FA: true });
-        }
-
-        throw error;
-      }
-    } catch (error: any) {
-      console.error("[Route] Error verifying code:", error);
+        ifreturn res.json({ requires2FA: true });
+        }ole.error("[Route] Error verifying code:", error);
       res.status(500).json({
         message: error.message || "Failed to verify code"
       });
@@ -245,6 +249,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Companies
   app.get("/api/companies", async (req, res) => {
+    // 2FA Setup
+    app.post("/api/2fa-setup", async (req, res) => {
+      const secret = speakeasy.generateSecret({ length: 20 });
+      // Store the secret in the user's record in the database
+      // This is a placeholder, replace with actual database logic
+      const user = await storage.getUserById(req.session.userId);
+      user.twoFactorSecret = secret.base32;
+      await storage.updateUser(user);
+      res.json({ otpauth_url: secret.otpauth_url });
+    });
+
+
     const companies = await storage.listCompanies();
     res.json(companies);
   });

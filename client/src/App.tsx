@@ -14,16 +14,20 @@ import Channels from "@/pages/channels";
 
 function Router() {
   return (
-    <Layout>
-      <Switch>
-        <ProtectedRoute path="/" component={Dashboard} />
-        <ProtectedRoute path="/crm" component={CRM} />
-        <ProtectedRoute path="/channels" component={Channels} />
-        <Route path="/auth" component={AuthPage} />
-        <Route path="/telegram-login" component={TelegramLogin} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      <Route path="/auth" component={AuthPage} />
+      <Route>
+        <Layout>
+          <Switch>
+            <ProtectedRoute path="/" component={Dashboard} />
+            <ProtectedRoute path="/crm" component={CRM} />
+            <ProtectedRoute path="/channels" component={Channels} />
+            <ProtectedRoute path="/telegram-login" component={TelegramLogin} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
 

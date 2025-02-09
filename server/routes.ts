@@ -329,7 +329,7 @@ export function registerRoutes(app: Express): Server {
   });
 
 
-  // Telegram Chats
+  // Add detailed logging for chat retrieval
   app.get("/api/telegram-chats", async (req, res) => {
     try {
       const telegramSession = req.session.telegramSession;
@@ -340,43 +340,50 @@ export function registerRoutes(app: Express): Server {
       console.log("[Route] Getting or creating client for session");
       const client = await getOrCreateClient(telegramSession);
 
-      console.log("[Route] Fetching dialogs");
+      console.log("[Route] Starting to fetch dialogs");
       const dialogs = await client.getDialogs({
         limit: 100, // Increased limit to get more chats
         offsetDate: 0, // Start from the most recent
         offsetId: 0, // Start from the beginning
         offsetPeer: "me", // Start from our own peer
-        includeSpam: true, // Include all chats
       });
 
       console.log(`[Route] Found ${dialogs.length} dialogs`);
-      console.log("[Route] Dialog types:", dialogs.map(d => ({
-        type: d.entity?.className,
-        title: d.entity?.title || d.name || 'Untitled',
-        id: d.entity?.id,
-        isChannel: d.isChannel,
-        isGroup: d.isGroup,
-        unreadCount: d.unreadCount
-      })));
+
+      // Log each dialog's details for debugging
+      dialogs.forEach((dialog, index) => {
+        console.log(`[Route] Dialog ${index + 1}:`, {
+          name: dialog.name,
+          isChannel: dialog.isChannel,
+          isGroup: dialog.isGroup,
+          isUser: dialog.isUser,
+          entity: {
+            className: dialog.entity?.className,
+            id: dialog.entity?.id,
+            accessHash: dialog.entity?.accessHash?.toString(),
+          },
+          unreadCount: dialog.unreadCount,
+          date: dialog.date ? new Date(dialog.date * 1000).toISOString() : null
+        });
+      });
 
       // Process and store each chat
       const chats = await Promise.all(
         dialogs.map(async (dialog) => {
           const chat = dialog.entity;
-          console.log(`[Route] Processing dialog:`, {
-            className: chat?.className,
-            id: chat?.id,
-            title: chat?.title || dialog.name,
-            isChannel: chat?.isChannel,
-            isGroup: chat?.isGroup,
-            participantsCount: chat?.participantsCount
-          });
-
-          // Handle all chat types
           if (!chat) {
             console.log(`[Route] Skipping dialog - no entity:`, dialog);
             return null;
           }
+
+          console.log(`[Route] Processing chat:`, {
+            id: chat.id,
+            className: chat.className,
+            name: dialog.name,
+            isChannel: dialog.isChannel,
+            isGroup: dialog.isGroup,
+            isUser: dialog.isUser
+          });
 
           // Get or create chat in database
           let dbChat = await storage.getTelegramChatByTelegramId(chat.id.toString());
@@ -385,15 +392,16 @@ export function registerRoutes(app: Express): Server {
             console.log(`[Route] Creating new chat record for ${chat.id}`);
             dbChat = await storage.createTelegramChat({
               telegramId: chat.id.toString(),
-              title: chat.title || dialog.name || 'Untitled',
+              title: dialog.name || 'Untitled',
               type: chat.className.toLowerCase(),
               status: 'pending',
               unreadCount: dialog.unreadCount || 0,
               lastMessageAt: dialog.date ? new Date(dialog.date * 1000) : new Date(),
               metadata: {
-                participantsCount: chat.participantsCount || 0,
-                isChannel: chat.isChannel,
-                isGroup: chat.isGroup,
+                participantsCount: dialog.isChannel || dialog.isGroup ? -1 : 2, // Default to 2 for private chats
+                isChannel: dialog.isChannel,
+                isGroup: dialog.isGroup,
+                isUser: dialog.isUser,
                 accessHash: chat.accessHash?.toString(),
               },
               createdById: req.user!.id,
@@ -401,9 +409,10 @@ export function registerRoutes(app: Express): Server {
           } else {
             console.log(`[Route] Updating existing chat record for ${chat.id}`);
             dbChat = await storage.updateTelegramChatMetadata(dbChat.id, {
-              participantsCount: chat.participantsCount || 0,
-              isChannel: chat.isChannel,
-              isGroup: chat.isGroup,
+              participantsCount: dialog.isChannel || dialog.isGroup ? -1 : 2,
+              isChannel: dialog.isChannel,
+              isGroup: dialog.isGroup,
+              isUser: dialog.isUser,
               accessHash: chat.accessHash?.toString(),
             });
           }
@@ -417,6 +426,7 @@ export function registerRoutes(app: Express): Server {
       console.log(`[Route] Returning ${validChats.length} valid chats`);
       console.log("[Route] Chat summary:", validChats.map(c => ({
         id: c.id,
+        telegramId: c.telegramId,
         title: c.title,
         type: c.type,
         metadata: c.metadata
@@ -426,11 +436,11 @@ export function registerRoutes(app: Express): Server {
 
     } catch (error) {
       console.error("[Route] Failed to list chats:", error);
-      console.error("[Route] Error details:", {
-        name: error?.name,
-        message: error?.message,
-        stack: error?.stack
-      });
+      console.error("[Route] Error details:", error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      } : error);
       res.status(500).json({ message: "Failed to list chats" });
     }
   });

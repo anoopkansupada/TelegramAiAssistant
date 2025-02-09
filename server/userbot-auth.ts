@@ -1,7 +1,6 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
-import input from "input";
 
 let client: TelegramClient | null = null;
 
@@ -157,28 +156,19 @@ export async function verify2FA(password: string) {
       throw new Error("2FA password is required");
     }
 
-    // Get account password info
-    console.log("[Userbot] Getting password info");
-    const passwordInfo = await client.invoke(new Api.account.GetPassword());
+    try {
+      // Simple direct password check using the client's method
+      await client.signIn({ password });
 
-    // Prepare the SRP parameters
-    console.log("[Userbot] Preparing SRP parameters");
-    const srpParams = await client._authProvider.secureIn({
-      password,
-      secureSecret: passwordInfo.secureSecret,
-      currentAlgo: passwordInfo.currentAlgo,
-    });
+      console.log("[Userbot] 2FA verification successful");
+      const sessionString = client.session.save() as unknown as string;
+      console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
 
-    console.log("[Userbot] Checking 2FA password");
-    await client.invoke(new Api.auth.CheckPassword({
-      password: srpParams
-    }));
-
-    console.log("[Userbot] 2FA verification successful");
-    const sessionString = client.session.save() as unknown as string;
-    console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
-
-    return sessionString;
+      return sessionString;
+    } catch (error: any) {
+      console.error("[Userbot] 2FA verification failed:", error);
+      throw new Error("Invalid 2FA password");
+    }
   } catch (error: any) {
     console.error("[Userbot] Error in verify2FA:", error);
     console.error("[Userbot] Error details:", {

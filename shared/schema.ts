@@ -64,8 +64,11 @@ export const telegramChats = pgTable("telegram_chats", {
   title: text("title").notNull(),
   type: text("type").notNull(), // 'private', 'group', 'supergroup', 'channel'
   status: text("status").notNull().default("pending"), // 'pending', 'synced', 'ignored'
+  category: text("category"), // AI-assigned category
+  importance: integer("importance").default(0), // AI-assigned importance score
   lastMessageAt: timestamp("last_message_at"),
   unreadCount: integer("unread_count").default(0),
+  metadata: jsonb("metadata"), // Store engagement metrics and other metadata
   createdById: integer("created_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -76,8 +79,22 @@ export const companySuggestions = pgTable("company_suggestions", {
   companyName: text("company_name").notNull(),
   website: text("website"),
   confidenceScore: integer("confidence_score").notNull(),
+  confidenceFactors: jsonb("confidence_factors"), // Store detailed explanation of confidence score
   metadata: jsonb("metadata"), // Store enriched data from various sources
   status: text("status").notNull().default("pending"), // 'pending', 'confirmed', 'rejected'
+  autoConfirmed: boolean("auto_confirmed").default(false), // Track if suggestion was auto-confirmed
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const followupSchedules = pgTable("followup_schedules", {
+  id: serial("id").primaryKey(),
+  chatId: integer("chat_id").notNull(),
+  message: text("message").notNull(),
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  status: text("status").notNull().default("pending"), // 'pending', 'sent', 'cancelled'
+  engagementScore: integer("engagement_score"), // AI-calculated optimal engagement time score
+  metadata: jsonb("metadata"), // Store engagement metrics and other metadata
+  createdById: integer("created_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -130,8 +147,11 @@ export const insertTelegramChatSchema = createInsertSchema(telegramChats).pick({
   title: true,
   type: true,
   status: true,
+  category: true,
+  importance: true,
   lastMessageAt: true,
   unreadCount: true,
+  metadata: true,
 });
 
 export const insertCompanySuggestionSchema = createInsertSchema(companySuggestions).pick({
@@ -139,8 +159,19 @@ export const insertCompanySuggestionSchema = createInsertSchema(companySuggestio
   companyName: true,
   website: true,
   confidenceScore: true,
+  confidenceFactors: true,
   metadata: true,
   status: true,
+  autoConfirmed: true,
+});
+
+export const insertFollowupScheduleSchema = createInsertSchema(followupSchedules).pick({
+  chatId: true,
+  message: true,
+  scheduledFor: true,
+  status: true,
+  engagementScore: true,
+  metadata: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -152,6 +183,7 @@ export type InsertTelegramChannel = z.infer<typeof insertTelegramChannelSchema>;
 export type InsertChannelInvitation = z.infer<typeof insertChannelInvitationSchema>;
 export type InsertTelegramChat = z.infer<typeof insertTelegramChatSchema>;
 export type InsertCompanySuggestion = z.infer<typeof insertCompanySuggestionSchema>;
+export type InsertFollowupSchedule = z.infer<typeof insertFollowupScheduleSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
@@ -162,3 +194,4 @@ export type TelegramChannel = typeof telegramChannels.$inferSelect;
 export type ChannelInvitation = typeof channelInvitations.$inferSelect;
 export type TelegramChat = typeof telegramChats.$inferSelect;
 export type CompanySuggestion = typeof companySuggestions.$inferSelect;
+export type FollowupSchedule = typeof followupSchedules.$inferSelect;

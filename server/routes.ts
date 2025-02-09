@@ -309,6 +309,47 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Enhanced Telegram Chats
+  app.get("/api/telegram-chats/category/:category", async (req, res) => {
+    try {
+      const chats = await storage.listChatsByCategory(req.params.category);
+      res.json(chats);
+    } catch (error) {
+      console.error("Failed to list chats by category:", error);
+      res.status(500).json({ message: "Failed to list chats by category" });
+    }
+  });
+
+  app.get("/api/telegram-chats/importance/:minImportance", async (req, res) => {
+    try {
+      const chats = await storage.listChatsByImportance(parseInt(req.params.minImportance));
+      res.json(chats);
+    } catch (error) {
+      console.error("Failed to list chats by importance:", error);
+      res.status(500).json({ message: "Failed to list chats by importance" });
+    }
+  });
+
+  app.post("/api/telegram-chats/:chatId/category", async (req, res) => {
+    try {
+      const { category, importance } = req.body;
+      const chat = await storage.getTelegramChat(parseInt(req.params.chatId));
+      if (!chat) {
+        return res.status(404).json({ message: "Chat not found" });
+      }
+
+      const updatedChat = await storage.updateTelegramChatCategory(
+        chat.id,
+        category,
+        importance
+      );
+      res.json(updatedChat);
+    } catch (error) {
+      console.error("Failed to update chat category:", error);
+      res.status(500).json({ message: "Failed to update chat category" });
+    }
+  });
+
   // Company Suggestions
   app.get("/api/telegram-chats/:chatId/suggestions", async (req, res) => {
     try {
@@ -337,6 +378,83 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Failed to update suggestion status:", error);
       res.status(500).json({ message: "Failed to update suggestion status" });
+    }
+  });
+
+    // Enhanced Company Suggestions
+  app.get("/api/company-suggestions/auto-confirmable/:minConfidence", async (req, res) => {
+    try {
+      const suggestions = await storage.listAutoConfirmableSuggestions(
+        parseInt(req.params.minConfidence)
+      );
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Failed to list auto-confirmable suggestions:", error);
+      res.status(500).json({ message: "Failed to list auto-confirmable suggestions" });
+    }
+  });
+
+  app.post("/api/company-suggestions/:suggestionId/confidence", async (req, res) => {
+    try {
+      const { confidenceScore, confidenceFactors } = req.body;
+      const suggestion = await storage.getCompanySuggestion(parseInt(req.params.suggestionId));
+      if (!suggestion) {
+        return res.status(404).json({ message: "Suggestion not found" });
+      }
+
+      const updatedSuggestion = await storage.updateCompanySuggestionConfidence(
+        suggestion.id,
+        confidenceScore,
+        confidenceFactors
+      );
+      res.json(updatedSuggestion);
+    } catch (error) {
+      console.error("Failed to update suggestion confidence:", error);
+      res.status(500).json({ message: "Failed to update suggestion confidence" });
+    }
+  });
+
+  // Followup Schedules
+  app.get("/api/followups/chat/:chatId", async (req, res) => {
+    try {
+      const followups = await storage.listFollowupSchedules(parseInt(req.params.chatId));
+      res.json(followups);
+    } catch (error) {
+      console.error("Failed to list followups:", error);
+      res.status(500).json({ message: "Failed to list followups" });
+    }
+  });
+
+  app.post("/api/followups", async (req, res) => {
+    try {
+      const followup = await storage.createFollowupSchedule({
+        ...req.body,
+        createdById: req.user!.id,
+      });
+      res.status(201).json(followup);
+    } catch (error) {
+      console.error("Failed to create followup:", error);
+      res.status(500).json({ message: "Failed to create followup" });
+    }
+  });
+
+  app.post("/api/followups/:followupId/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!['sent', 'cancelled'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const followup = await storage.getFollowupSchedule(parseInt(req.params.followupId));
+      if (!followup) {
+        return res.status(404).json({ message: "Followup not found" });
+      }
+
+      const updatedFollowup = await storage.updateFollowupStatus(followup.id, status);
+      res.json(updatedFollowup);
+    } catch (error) {
+      console.error("Failed to update followup status:", error);
+      res.status(500).json({ message: "Failed to update followup status" });
     }
   });
 

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { InsertUser, User, Contact, Company, Message, Announcement, 
          users, contacts, companies, messages, announcements,
          TelegramChannel, telegramChannels, InsertContact, InsertCompany,
@@ -9,6 +9,9 @@ import { InsertUser, User, Contact, Company, Message, Announcement,
          telegramChats, companySuggestions } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { 
+  InsertFollowupSchedule, FollowupSchedule, followupSchedules
+} from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -59,12 +62,29 @@ export interface IStorage {
   createTelegramChat(chat: InsertTelegramChat & { createdById: number }): Promise<TelegramChat>;
   updateTelegramChatStatus(id: number, status: string): Promise<TelegramChat>;
   updateTelegramChatUnreadCount(id: number, unreadCount: number): Promise<TelegramChat>;
+  updateTelegramChatMetadata(id: number, metadata: any): Promise<TelegramChat>;
+  updateTelegramChatCategory(id: number, category: string, importance: number): Promise<TelegramChat>;
+  listChatsByCategory(category: string): Promise<TelegramChat[]>;
+  listChatsByImportance(minImportance: number): Promise<TelegramChat[]>;
 
   // Company Suggestions
   getCompanySuggestion(id: number): Promise<CompanySuggestion | undefined>;
   listCompanySuggestions(chatId: number): Promise<CompanySuggestion[]>;
   createCompanySuggestion(suggestion: InsertCompanySuggestion): Promise<CompanySuggestion>;
   updateCompanySuggestionStatus(id: number, status: string): Promise<CompanySuggestion>;
+  updateCompanySuggestionConfidence(
+    id: number, 
+    confidenceScore: number, 
+    confidenceFactors: any
+  ): Promise<CompanySuggestion>;
+  listAutoConfirmableSuggestions(minConfidence: number): Promise<CompanySuggestion[]>;
+
+  // Followup Schedules
+  getFollowupSchedule(id: number): Promise<FollowupSchedule | undefined>;
+  listFollowupSchedules(chatId: number): Promise<FollowupSchedule[]>;
+  createFollowupSchedule(schedule: InsertFollowupSchedule & { createdById: number }): Promise<FollowupSchedule>;
+  updateFollowupStatus(id: number, status: string): Promise<FollowupSchedule>;
+  listPendingFollowups(): Promise<FollowupSchedule[]>;
 
   sessionStore: session.Store;
 }
@@ -154,7 +174,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listAnnouncements(): Promise<Announcement[]> {
-    return await db.select()
+    return await db
+      .select()
       .from(announcements)
       .orderBy(announcements.createdAt);
   }
@@ -191,7 +212,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listChannelInvitations(channelId: number): Promise<ChannelInvitation[]> {
-    return await db.select()
+    return await db
+      .select()
       .from(channelInvitations)
       .where(eq(channelInvitations.channelId, channelId))
       .orderBy(channelInvitations.createdAt);
@@ -263,6 +285,40 @@ export class DatabaseStorage implements IStorage {
     return updatedChat;
   }
 
+  async updateTelegramChatMetadata(id: number, metadata: any): Promise<TelegramChat> {
+    const [updatedChat] = await db
+      .update(telegramChats)
+      .set({ metadata })
+      .where(eq(telegramChats.id, id))
+      .returning();
+    return updatedChat;
+  }
+
+  async updateTelegramChatCategory(id: number, category: string, importance: number): Promise<TelegramChat> {
+    const [updatedChat] = await db
+      .update(telegramChats)
+      .set({ category, importance })
+      .where(eq(telegramChats.id, id))
+      .returning();
+    return updatedChat;
+  }
+
+  async listChatsByCategory(category: string): Promise<TelegramChat[]> {
+    return await db
+      .select()
+      .from(telegramChats)
+      .where(eq(telegramChats.category, category))
+      .orderBy(telegramChats.importance);
+  }
+
+  async listChatsByImportance(minImportance: number): Promise<TelegramChat[]> {
+    return await db
+      .select()
+      .from(telegramChats)
+      .where(sql`${telegramChats.importance} >= ${minImportance}`)
+      .orderBy(telegramChats.importance);
+  }
+
   // Company Suggestions
   async getCompanySuggestion(id: number): Promise<CompanySuggestion | undefined> {
     const [suggestion] = await db.select().from(companySuggestions).where(eq(companySuggestions.id, id));
@@ -289,6 +345,81 @@ export class DatabaseStorage implements IStorage {
       .where(eq(companySuggestions.id, id))
       .returning();
     return updatedSuggestion;
+  }
+
+  async updateCompanySuggestionConfidence(
+    id: number,
+    confidenceScore: number,
+    confidenceFactors: any
+  ): Promise<CompanySuggestion> {
+    const [updatedSuggestion] = await db
+      .update(companySuggestions)
+      .set({ confidenceScore, confidenceFactors })
+      .where(eq(companySuggestions.id, id))
+      .returning();
+    return updatedSuggestion;
+  }
+
+  async listAutoConfirmableSuggestions(minConfidence: number): Promise<CompanySuggestion[]> {
+    return await db
+      .select()
+      .from(companySuggestions)
+      .where(
+        and(
+          eq(companySuggestions.status, 'pending'),
+          sql`${companySuggestions.confidenceScore} >= ${minConfidence}`
+        )
+      )
+      .orderBy(companySuggestions.confidenceScore);
+  }
+
+  // Followup Schedules
+  async getFollowupSchedule(id: number): Promise<FollowupSchedule | undefined> {
+    const [schedule] = await db
+      .select()
+      .from(followupSchedules)
+      .where(eq(followupSchedules.id, id));
+    return schedule;
+  }
+
+  async listFollowupSchedules(chatId: number): Promise<FollowupSchedule[]> {
+    return await db
+      .select()
+      .from(followupSchedules)
+      .where(eq(followupSchedules.chatId, chatId))
+      .orderBy(followupSchedules.scheduledFor);
+  }
+
+  async createFollowupSchedule(
+    schedule: InsertFollowupSchedule & { createdById: number }
+  ): Promise<FollowupSchedule> {
+    const [newSchedule] = await db
+      .insert(followupSchedules)
+      .values(schedule)
+      .returning();
+    return newSchedule;
+  }
+
+  async updateFollowupStatus(id: number, status: string): Promise<FollowupSchedule> {
+    const [updatedSchedule] = await db
+      .update(followupSchedules)
+      .set({ status })
+      .where(eq(followupSchedules.id, id))
+      .returning();
+    return updatedSchedule;
+  }
+
+  async listPendingFollowups(): Promise<FollowupSchedule[]> {
+    return await db
+      .select()
+      .from(followupSchedules)
+      .where(
+        and(
+          eq(followupSchedules.status, 'pending'),
+          sql`${followupSchedules.scheduledFor} <= now()`
+        )
+      )
+      .orderBy(followupSchedules.scheduledFor);
   }
 }
 

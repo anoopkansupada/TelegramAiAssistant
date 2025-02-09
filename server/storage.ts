@@ -1,15 +1,16 @@
 import { db } from "./db";
 import { eq, sql, and } from "drizzle-orm";
-import { InsertUser, User, Contact, Company, Message, Announcement, 
+import { InsertUser, User, Contact, Company, Message, Announcement,
          users, contacts, companies, messages, announcements,
          TelegramChannel, telegramChannels, InsertContact, InsertCompany,
          InsertMessage, InsertAnnouncement, InsertTelegramChannel,
          channelInvitations, ChannelInvitation, InsertChannelInvitation,
          TelegramChat, InsertTelegramChat, CompanySuggestion, InsertCompanySuggestion,
-         telegramChats, companySuggestions, messageSuggestions, InsertMessageSuggestion, MessageSuggestion } from "@shared/schema";
+         telegramChats, companySuggestions, messageSuggestions, InsertMessageSuggestion, MessageSuggestion,
+         telegramSessions, InsertTelegramSession, TelegramSession } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
-import { 
+import {
   InsertFollowupSchedule, FollowupSchedule, followupSchedules
 } from "@shared/schema";
 
@@ -22,6 +23,8 @@ export class DatabaseStorage {
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000
     });
+    // Run cleanup every 24 hours
+    setInterval(() => this.cleanupExpiredSessions(), 24 * 60 * 60 * 1000);
   }
 
   // Auth
@@ -637,6 +640,97 @@ export class DatabaseStorage {
         .returning();
     } catch (error) {
       console.error('Error in createMessageSuggestions:', error);
+      throw error;
+    }
+  }
+
+
+  // Telegram Sessions
+  async getTelegramSession(userId: number): Promise<TelegramSession | undefined> {
+    try {
+      return await db.query.telegramSessions.findFirst({
+        where: and(
+          eq(telegramSessions.userId, userId),
+          eq(telegramSessions.isActive, true)
+        )
+      });
+    } catch (error) {
+      console.error('Error in getTelegramSession:', error);
+      throw error;
+    }
+  }
+
+  async createTelegramSession(session: InsertTelegramSession & { userId: number }): Promise<TelegramSession> {
+    try {
+      // Deactivate any existing active sessions for this user
+      await db.update(telegramSessions)
+        .set({ isActive: false })
+        .where(and(
+          eq(telegramSessions.userId, session.userId),
+          eq(telegramSessions.isActive, true)
+        ));
+
+      // Create new session
+      const [newSession] = await db.insert(telegramSessions)
+        .values({
+          ...session,
+          lastUsed: new Date(),
+          lastAuthDate: new Date(),
+        })
+        .returning();
+      return newSession;
+    } catch (error) {
+      console.error('Error in createTelegramSession:', error);
+      throw error;
+    }
+  }
+
+  async updateTelegramSession(id: number, updates: Partial<TelegramSession>): Promise<TelegramSession> {
+    try {
+      const [updatedSession] = await db.update(telegramSessions)
+        .set({
+          ...updates,
+          lastUsed: new Date()
+        })
+        .where(eq(telegramSessions.id, id))
+        .returning();
+      return updatedSession;
+    } catch (error) {
+      console.error('Error in updateTelegramSession:', error);
+      throw error;
+    }
+  }
+
+  async deactivateTelegramSession(id: number): Promise<void> {
+    try {
+      await db.update(telegramSessions)
+        .set({
+          isActive: false,
+          lastUsed: new Date()
+        })
+        .where(eq(telegramSessions.id, id));
+    } catch (error) {
+      console.error('Error in deactivateTelegramSession:', error);
+      throw error;
+    }
+  }
+
+  async cleanupExpiredSessions(): Promise<void> {
+    try {
+      // Cleanup sessions older than 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      await db.update(telegramSessions)
+        .set({ isActive: false })
+        .where(
+          and(
+            eq(telegramSessions.isActive, true),
+            sql`${telegramSessions.lastUsed} < ${thirtyDaysAgo}`
+          )
+        );
+    } catch (error) {
+      console.error('Error in cleanupExpiredSessions:', error);
       throw error;
     }
   }

@@ -87,6 +87,11 @@ export interface IStorage {
   listPendingFollowups(): Promise<FollowupSchedule[]>;
 
   sessionStore: session.Store;
+
+  // Extended User Methods
+  getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
+  updateUser(user: User): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -422,6 +427,31 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(followupSchedules.scheduledFor);
+  }
+
+  async getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, phoneNumber)); // Using username as phone number
+    return user;
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id));
+    return user;
+  }
+
+  async updateUser(user: User): Promise<User> {
+    const [updatedUser] = await db
+      .update(users)
+      .set(user)
+      .where(eq(users.id, user.id))
+      .returning();
+    return updatedUser;
   }
 }
 

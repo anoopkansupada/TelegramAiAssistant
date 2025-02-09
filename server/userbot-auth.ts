@@ -1,6 +1,7 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
+import { createHash } from 'crypto';
 
 let client: TelegramClient | null = null;
 
@@ -56,7 +57,7 @@ export async function requestVerificationCode(phoneNumber: string) {
     console.log("[Userbot] Formatted phone number:", formattedPhone);
 
     console.log("[Userbot] Sending verification code");
-    const { phoneCodeHash } = await client.invoke(new Api.auth.SendCode({
+    const result = await client.invoke(new Api.auth.SendCode({
       phoneNumber: formattedPhone,
       apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
       apiHash: process.env.TELEGRAM_API_HASH!,
@@ -67,8 +68,8 @@ export async function requestVerificationCode(phoneNumber: string) {
       })
     }));
 
-    console.log("[Userbot] Verification code sent successfully, hash received:", phoneCodeHash);
-    return phoneCodeHash;
+    console.log("[Userbot] Verification code sent successfully, hash received:", result.phoneCodeHash);
+    return result.phoneCodeHash;
   } catch (error: any) {
     console.error("[Userbot] Error in requestVerificationCode:", error);
     console.error("[Userbot] Error details:", {
@@ -156,9 +157,19 @@ export async function verify2FA(password: string) {
       throw new Error("2FA password is required");
     }
 
-    console.log("[Userbot] Checking 2FA password");
-    const result = await client.invoke(new Api.auth.CheckPassword({
-      password: await client.computePasswordCheck(password)
+    // Get the account's password info
+    console.log("[Userbot] Getting account password info");
+    const passwordInfo = await client.invoke(new Api.account.GetPassword());
+
+    // Calculate the password hash using SRP
+    console.log("[Userbot] Calculating password hash");
+    const { srpId, A, M1 } = await client.invoke(new Api.auth.CheckPassword({
+      password: {
+        className: "InputCheckPasswordSRP",
+        srpId: passwordInfo.srpId,
+        A: passwordInfo.srpB,
+        M1: createHash('sha256').update(password).digest('hex')
+      }
     }));
 
     console.log("[Userbot] 2FA verification successful");

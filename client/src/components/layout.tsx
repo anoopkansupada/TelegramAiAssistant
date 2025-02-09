@@ -57,78 +57,83 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <div className="w-[280px] flex flex-col border-r bg-card/50 backdrop-blur dark:bg-gray-900 dark:border-gray-800">
         {/* Logo area */}
-        <div className="h-[60px] flex items-center gap-2 px-4 border-b dark:border-gray-800">
-          <MessageSquare className="h-6 w-6 text-primary dark:text-gray-400" />
-          <span className="font-semibold text-lg dark:text-gray-200">TelegramCRM</span>
+        <div className="h-[60px] flex items-center gap-3 px-6 border-b dark:border-gray-800">
+          <MessageSquare className="h-[22px] w-[22px] text-primary dark:text-gray-400" />
+          <span className="font-semibold text-[15px] tracking-[-0.025em] dark:text-gray-200">TelegramCRM</span>
         </div>
 
         {/* Command Menu */}
         <div className="px-4 py-3">
           <Button 
             variant="outline" 
-            className="w-full justify-between text-muted-foreground hover:text-foreground dark:bg-gray-800 dark:border-gray-700"
+            className="w-full justify-between text-muted-foreground hover:text-foreground dark:bg-gray-800/50 dark:border-gray-700 h-9 px-3 text-[13px]"
           >
             <div className="flex items-center">
-              <Search className="h-4 w-4 mr-2" />
+              <Search className="h-[15px] w-[15px] mr-2 stroke-[1.5px]" />
               <span>Search...</span>
             </div>
-            <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium text-muted-foreground">
-              <span className="text-xs">⌘</span>K
+            <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <span className="text-[10px]">⌘</span>K
             </kbd>
           </Button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
           {navigation.map((item) => (
             <Link key={item.name} href={item.href}>
               <Button
                 variant={item.current ? "secondary" : "ghost"}
-                className="w-full justify-start h-10 px-3 hover:bg-accent"
+                className="w-full justify-start h-[34px] px-3 hover:bg-accent text-[13px] font-medium"
               >
-                <item.icon className="h-[18px] w-[18px] mr-3 text-gray-500 dark:text-gray-400" />
-                <span className="text-sm font-medium">{item.name}</span>
+                <item.icon className="h-[18px] w-[18px] mr-3 text-gray-500 dark:text-gray-400 stroke-[1.5px]" />
+                <span>{item.name}</span>
               </Button>
             </Link>
           ))}
         </nav>
 
         {/* Workspace Selector */}
-        <div className="p-4 border-t dark:border-gray-800">
+        <div className="px-3 py-2 border-t dark:border-gray-800">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-between hover:bg-accent">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-between hover:bg-accent h-[42px] px-3"
+              >
                 <div className="flex items-center">
-                  <Avatar className="h-5 w-5 mr-2" />
-                  <span className="text-sm">Workspace</span>
+                  <Avatar className="h-[22px] w-[22px] mr-2" />
+                  <span className="text-[13px] font-medium">Workspace</span>
                 </div>
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="h-4 w-4 stroke-[1.5px]" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[240px]">
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuItem>Create New Workspace</DropdownMenuItem>
+            <DropdownMenuContent align="start" className="w-[270px]">
+              <DropdownMenuItem className="text-[13px]">Settings</DropdownMenuItem>
+              <DropdownMenuItem className="text-[13px]">Create New Workspace</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
         {/* User Menu */}
-        <div className="p-4 border-t dark:border-gray-800">
-          <div className="flex items-center justify-between">
+        <div className="px-3 py-2 border-t dark:border-gray-800">
+          <div className="flex items-center justify-between px-3 py-2">
             <div className="flex items-center">
-              <Avatar className="h-8 w-8 mr-2" />
+              <Avatar className="h-[32px] w-[32px] mr-3" />
               <div className="flex flex-col">
-                <span className="text-sm font-medium dark:text-gray-200">{user.username}</span>
-                <span className="text-xs text-muted-foreground">Admin</span>
+                <span className="text-[13px] font-medium leading-none mb-1 dark:text-gray-200">
+                  {user.username}
+                </span>
+                <span className="text-[12px] text-muted-foreground leading-none">Admin</span>
               </div>
             </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => logoutMutation.mutate()}
-              className="hover:bg-accent"
+              className="h-[32px] w-[32px] hover:bg-accent"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-[18px] w-[18px] stroke-[1.5px]" />
             </Button>
           </div>
         </div>
@@ -138,15 +143,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
         <header className="h-[60px] border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6 dark:bg-gray-900 dark:border-gray-800">
-          <h1 className="text-xl font-semibold dark:text-gray-200">
+          <h1 className="text-[15px] font-semibold tracking-[-0.025em] dark:text-gray-200">
             {navigation.find((item) => item.current)?.name || "Dashboard"}
           </h1>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="hover:bg-accent">
-              <BellIcon className="h-[18px] w-[18px]" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-[34px] w-[34px] hover:bg-accent"
+            >
+              <BellIcon className="h-[18px] w-[18px] stroke-[1.5px]" />
             </Button>
-            <Button className="shadow-sm">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button 
+              className="h-[34px] px-3 shadow-sm text-[13px] font-medium"
+            >
+              <Plus className="h-[15px] w-[15px] mr-2 stroke-[1.5px]" />
               Add New
             </Button>
           </div>

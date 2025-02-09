@@ -32,10 +32,10 @@ interface StatusUpdate {
   lastChecked: string;
 }
 
-// Custom logger implementation that implements Logger interface
+// Custom logger implementation
 class CustomLogger implements Logger {
   private prefix: string;
-  logLevel: LogLevel = LogLevel.INFO;  // Required by Logger interface
+  private _logLevel: LogLevel = LogLevel.INFO;
 
   constructor(prefix: string = "[UserBot]") {
     this.prefix = prefix;
@@ -46,29 +46,31 @@ class CustomLogger implements Logger {
     return `${timestamp} ${this.prefix} [${LogLevel[level]}] ${message}`;
   }
 
+  get logLevel(): LogLevel {
+    return this._logLevel;
+  }
+
+  set logLevel(level: LogLevel) {
+    this._logLevel = level;
+  }
+
   _log(level: LogLevel, message: string): void {
-    const formattedMessage = this.formatLog(level, message);
-    switch (level) {
-      case LogLevel.DEBUG:
-        console.debug('\x1b[90m' + formattedMessage + '\x1b[0m');
-        break;
-      case LogLevel.INFO:
-        console.info('\x1b[32m' + formattedMessage + '\x1b[0m');
-        break;
-      case LogLevel.ERROR:
-        console.error('\x1b[31m' + formattedMessage + '\x1b[0m');
-        break;
-      default:
-        console.log(formattedMessage);
+    if (level >= this._logLevel) {
+      const formattedMessage = this.formatLog(level, message);
+      switch (level) {
+        case LogLevel.DEBUG:
+          console.debug('\x1b[90m' + formattedMessage + '\x1b[0m');
+          break;
+        case LogLevel.INFO:
+          console.info('\x1b[32m' + formattedMessage + '\x1b[0m');
+          break;
+        case LogLevel.ERROR:
+          console.error('\x1b[31m' + formattedMessage + '\x1b[0m');
+          break;
+        default:
+          console.log(formattedMessage);
+      }
     }
-  }
-
-  setLevel(level: LogLevel): void {
-    this.logLevel = level;
-  }
-
-  getLevel(): LogLevel {
-    return this.logLevel;
   }
 
   log(level: LogLevel, message: string): void {
@@ -76,29 +78,32 @@ class CustomLogger implements Logger {
   }
 
   debug(message: string): void {
-    if (this.logLevel <= LogLevel.DEBUG) {
-      this._log(LogLevel.DEBUG, message);
-    }
+    this._log(LogLevel.DEBUG, message);
   }
 
   info(message: string): void {
-    if (this.logLevel <= LogLevel.INFO) {
-      this._log(LogLevel.INFO, message);
-    }
+    this._log(LogLevel.INFO, message);
   }
 
   warn(message: string): void {
-    if (this.logLevel <= LogLevel.ERROR) {
-      this._log(LogLevel.ERROR, message);
-    }
+    this._log(LogLevel.ERROR, message);
   }
 
   error(message: string): void {
     this._log(LogLevel.ERROR, message);
   }
 
+  // Required by Logger interface
+  setLevel(level: LogLevel): void {
+    this._logLevel = level;
+  }
+
+  getLevel(): LogLevel {
+    return this._logLevel;
+  }
+
   canSend(level: LogLevel): boolean {
-    return this.logLevel <= level;
+    return level >= this._logLevel;
   }
 
   getDateTime(): string {
@@ -206,7 +211,7 @@ export async function getOrCreateClient(session: string): Promise<TelegramClient
 
     return client;
   } catch (error) {
-    logger.error(`Error in getOrCreateClient: ${error}`);
+    logger.error(`Error in getOrCreateClient: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
 }
@@ -251,7 +256,7 @@ async function checkAndBroadcastStatus() {
       });
     }
   } catch (error) {
-    logger.error(`Error in status check: ${error}`);
+    logger.error(`Error in status check: ${error instanceof Error ? error.message : String(error)}`);
     global.broadcastStatus?.({
       type: 'status',
       connected: false,
@@ -274,7 +279,7 @@ export async function disconnectClient(): Promise<void> {
       clientInstance.lastUsed = 0;
       logger.info("Client disconnected successfully");
     } catch (error) {
-      logger.error(`Error disconnecting client: ${error}`);
+      logger.error(`Error disconnecting client: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

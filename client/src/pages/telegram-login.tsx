@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BotIcon, CheckCircle2, XCircle } from "lucide-react";
+import { BotIcon, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -13,9 +13,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 
 const telegramAuthSchema = z.object({
-  phoneNumber: z.string().min(1, "Phone number is required"),
-  code: z.string().optional(),
-  password: z.string().optional(),
+  phoneNumber: z.string()
+    .min(1, "Phone number is required")
+    .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format"),
+  code: z.string()
+    .optional()
+    .transform(val => val === "" ? undefined : val),
+  password: z.string()
+    .optional()
+    .transform(val => val === "" ? undefined : val),
 });
 
 type TelegramAuthForm = z.infer<typeof telegramAuthSchema>;
@@ -36,13 +42,20 @@ export default function TelegramLogin() {
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<TelegramAuthForm>({
     resolver: zodResolver(telegramAuthSchema),
+    defaultValues: {
+      phoneNumber: "",
+      code: "",
+      password: "",
+    }
   });
 
   const onSubmit = async (data: TelegramAuthForm) => {
     try {
+      setIsSubmitting(true);
       if (!awaitingCode) {
         // Request verification code
         const response = await apiRequest("POST", "/api/telegram-auth/request-code", {
@@ -50,7 +63,12 @@ export default function TelegramLogin() {
         });
         if (response.ok) {
           setAwaitingCode(true);
-          toast({ title: "Verification code sent" });
+          toast({ 
+            title: "Code sent",
+            description: "Please check your Telegram app for the verification code"
+          });
+          // Clear code field when requesting new code
+          form.setValue("code", "");
         } else {
           const error = await response.json();
           throw new Error(error.message);
@@ -61,7 +79,10 @@ export default function TelegramLogin() {
           password: data.password,
         });
         if (response.ok) {
-          toast({ title: "Successfully authenticated" });
+          toast({ 
+            title: "Success",
+            description: "Authentication successful"
+          });
           window.location.reload();
         } else {
           const error = await response.json();
@@ -76,9 +97,17 @@ export default function TelegramLogin() {
 
         if (result.requires2FA) {
           setRequires2FA(true);
-          toast({ title: "Please enter your 2FA password" });
+          toast({ 
+            title: "2FA Required",
+            description: "Please enter your Two-Factor Authentication password"
+          });
+          // Clear password field when 2FA is required
+          form.setValue("password", "");
         } else if (response.ok) {
-          toast({ title: "Successfully authenticated" });
+          toast({ 
+            title: "Success",
+            description: "Authentication successful"
+          });
           window.location.reload();
         } else {
           throw new Error(result.message);
@@ -86,10 +115,12 @@ export default function TelegramLogin() {
       }
     } catch (error) {
       toast({
-        title: "Authentication failed",
+        title: "Error",
         description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -103,6 +134,9 @@ export default function TelegramLogin() {
           setAwaitingCode(false);
           setRequires2FA(false);
         }
+      })
+      .catch(error => {
+        console.error("Failed to fetch status:", error);
       });
 
     // Setup WebSocket connection
@@ -175,8 +209,8 @@ export default function TelegramLogin() {
             <CardTitle className="text-2xl">Connect Telegram Account</CardTitle>
           </div>
           {status && (
-            <Alert>
-              <XCircle className="h-4 w-4 text-destructive" />
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
               <AlertDescription className="ml-2">
                 Not connected
               </AlertDescription>
@@ -196,7 +230,7 @@ export default function TelegramLogin() {
                       <Input
                         {...field}
                         placeholder="+1234567890"
-                        disabled={awaitingCode}
+                        disabled={awaitingCode || isSubmitting}
                       />
                     </FormControl>
                     <FormMessage />
@@ -215,6 +249,7 @@ export default function TelegramLogin() {
                         <Input
                           {...field}
                           placeholder="Enter code from Telegram"
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                       <FormMessage />
@@ -235,6 +270,7 @@ export default function TelegramLogin() {
                           {...field}
                           type="password"
                           placeholder="Enter your 2FA password"
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                       <FormMessage />
@@ -243,8 +279,15 @@ export default function TelegramLogin() {
                 />
               )}
 
-              <Button type="submit" className="w-full">
-                {!awaitingCode ? "Send Code" : requires2FA ? "Verify 2FA" : "Verify Code"}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Please wait...
+                  </>
+                ) : (
+                  !awaitingCode ? "Send Code" : requires2FA ? "Verify 2FA" : "Verify Code"
+                )}
               </Button>
             </form>
           </Form>

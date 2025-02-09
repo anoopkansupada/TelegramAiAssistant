@@ -1,16 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BotIcon, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { BotIcon, CheckCircle2, XCircle, Loader2, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
+
+const CODE_EXPIRATION_TIME = 120; // 2 minutes in seconds
 
 const telegramAuthSchema = z.object({
   phoneNumber: z.string()
@@ -43,6 +45,8 @@ export default function TelegramLogin() {
   const [requires2FA, setRequires2FA] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(CODE_EXPIRATION_TIME);
+  const timerRef = useRef<NodeJS.Timeout>();
 
   const form = useForm<TelegramAuthForm>({
     resolver: zodResolver(telegramAuthSchema),
@@ -53,6 +57,34 @@ export default function TelegramLogin() {
     }
   });
 
+  // Handle code expiration timer
+  useEffect(() => {
+    if (awaitingCode && !requires2FA) {
+      setTimeRemaining(CODE_EXPIRATION_TIME);
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            setAwaitingCode(false);
+            toast({
+              title: "Code Expired",
+              description: "The verification code has expired. Please request a new one.",
+              variant: "destructive",
+            });
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
+    }
+  }, [awaitingCode, requires2FA, toast]);
+
   const onSubmit = async (data: TelegramAuthForm) => {
     try {
       setIsSubmitting(true);
@@ -61,17 +93,30 @@ export default function TelegramLogin() {
         const response = await apiRequest("POST", "/api/telegram-auth/request-code", {
           phoneNumber: data.phoneNumber,
         });
+
         if (response.ok) {
+          const result = await response.json();
           setAwaitingCode(true);
           toast({ 
             title: "Code sent",
-            description: "Please check your Telegram app for the verification code"
+            description: result.message || "Please check your Telegram app for the verification code"
           });
           // Clear code field when requesting new code
           form.setValue("code", "");
         } else {
           const error = await response.json();
-          throw new Error(error.message);
+          if (error.code === "AUTH_RESTART") {
+            toast({
+              title: "Please try again",
+              description: "There was an issue sending the code. Please try again.",
+              variant: "destructive",
+            });
+            // Reset form state
+            setAwaitingCode(false);
+            setRequires2FA(false);
+          } else {
+            throw new Error(error.message);
+          }
         }
       } else if (requires2FA) {
         // Submit 2FA password
@@ -93,8 +138,23 @@ export default function TelegramLogin() {
         const response = await apiRequest("POST", "/api/telegram-auth/verify", {
           code: data.code,
         });
-        const result = await response.json();
 
+        if (!response.ok) {
+          const error = await response.json();
+          if (error.code === "PHONE_CODE_EXPIRED") {
+            toast({
+              title: "Code Expired",
+              description: error.message,
+              variant: "destructive",
+            });
+            setAwaitingCode(false);
+            form.setValue("code", "");
+            return;
+          }
+          throw new Error(error.message);
+        }
+
+        const result = await response.json();
         if (result.requires2FA) {
           setRequires2FA(true);
           toast({ 
@@ -103,14 +163,12 @@ export default function TelegramLogin() {
           });
           // Clear password field when 2FA is required
           form.setValue("password", "");
-        } else if (response.ok) {
+        } else {
           toast({ 
             title: "Success",
             description: "Authentication successful"
           });
           window.location.reload();
-        } else {
-          throw new Error(result.message);
         }
       }
     } catch (error) {
@@ -239,23 +297,34 @@ export default function TelegramLogin() {
               />
 
               {awaitingCode && !requires2FA && (
-                <FormField
-                  control={form.control}
-                  name="code"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Verification Code</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="Enter code from Telegram"
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <>
+                  <FormField
+                    control={form.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center justify-between">
+                          <span>Verification Code</span>
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Timer className="h-4 w-4" />
+                            {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                          </span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="Enter code from Telegram"
+                            disabled={isSubmitting}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Code will expire in {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                  </p>
+                </>
               )}
 
               {requires2FA && (
@@ -295,6 +364,8 @@ export default function TelegramLogin() {
           <p className="text-sm text-muted-foreground mt-4 text-center">
             {requires2FA
               ? "Enter your Two-Factor Authentication password"
+              : awaitingCode
+              ? "Enter the code sent to your Telegram app"
               : "You'll need to provide your Telegram account's phone number to enable userbot features"}
           </p>
         </CardContent>

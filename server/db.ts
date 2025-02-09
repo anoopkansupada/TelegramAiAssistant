@@ -11,11 +11,7 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Configure connection pool with retries
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
-
-// Configure pool with better defaults
+// Configure pool with better defaults (retaining some original config for better defaults)
 export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
   max: 20, // Maximum number of clients in the pool
@@ -36,7 +32,7 @@ const drizzleDb = drizzle(pool, { schema });
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   let lastError;
 
-  for (let i = 0; i < MAX_RETRIES; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
       return await operation();
     } catch (error: any) {
@@ -48,11 +44,11 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
           error.code === '08001' || // Unable to establish connection
           error.code === '08004') { // Rejected connection
 
-        console.warn(`Database operation failed (attempt ${i + 1}/${MAX_RETRIES}):`, error.message);
+        console.warn(`Database operation failed (attempt ${i + 1}/3):`, error.message);
 
         // Wait before retrying
-        if (i < MAX_RETRIES - 1) {
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (i + 1)));
+        if (i < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
           continue;
         }
       }

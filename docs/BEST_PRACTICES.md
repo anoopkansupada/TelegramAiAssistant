@@ -1,95 +1,127 @@
-# Telegram CRM Platform Best Practices
+// Correct
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, id)
+  });
 
-## Project Overview
-A Telegram-integrated CRM platform designed to streamline customer relationship management with intelligent communication tools and channel management capabilities.
-
-## Tech Stack
-- React frontend with shadcn/ui components
-- Express backend
-- Telegraf for Telegram integration
-- PostgreSQL database
-- Drizzle ORM for database management
-- Enhanced authentication debugging and logging
-- AI-powered communication features
-
-## Development Guidelines
-
-### 1. Project Setup
-- Use Git for version control
-- Configure environment variables properly using Replit Secrets
-- Follow the proper project structure:
+  // Incorrect
+  const [user] = await db.select().from(users).where(eq(users.id, id));
   ```
-  ├── client/          # React frontend
-  ├── server/          # Express backend
-  ├── shared/          # Shared types and utilities
-  ├── docs/            # Documentation
-  └── drizzle.config.ts
+- Implement proper connection pooling:
+  ```typescript
+  const pool = new Pool({ 
+    connectionString: process.env.DATABASE_URL,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+    maxUses: 7500,
+  });
   ```
+- Use retry mechanisms for database operations
+- Avoid raw SQL queries
+- Use transactions for multi-step operations
 
-### 2. Bot Structure & Responsibilities
-#### Telegram Bot (Telegraf)
-- Broadcasts announcements when requested
-- Handles user interactions through web UI
-- Maintains secure session management
+### 2. Telegram Integration
+- Implement proper session handling:
+  - Regular connection health checks
+  - Automatic cleanup on disconnection
+  - Connection retry with backoff
+- Use singleton pattern for client management
+- Validate all API responses
+- Handle rate limits properly
 
-#### User Bot Integration
-- Reads messages and chat history
-- Processes meeting transcripts
-- Suggests engagement strategies
-- Requires web UI approval for actions
+### 3. Authentication Flow
+- Implement secure password validation
+- Handle all 2FA scenarios
+- Use proper session cleanup
+- Validate inputs before API calls
 
-### 3. Database Management
-- Use Drizzle ORM for all database operations
-- Define schemas in `shared/schema.ts`
-- Never write raw SQL queries
-- Use migrations for schema changes
+### 4. Error Handling
+- Use custom logger implementation
+- Implement retry mechanisms with backoff
+- Track connection states
+- Log important state changes
 
-### 4. Frontend Development
+### 5. Frontend Development
 - Use shadcn/ui components
 - Implement responsive designs
 - Follow React Query patterns for data fetching
 - Use proper form validation with Zod
 
-### 5. Security Practices
+### 6. Project Structure
+```
+├── client/          # React frontend
+├── server/          # Express backend
+├── shared/          # Shared types and utils
+├── docs/            # Documentation
+└── drizzle.config.ts
+```
+
+### 7. Security Practices
 - Store sensitive data in Replit Secrets
 - Implement proper authentication flows
 - Validate all user inputs
 - Use secure session management
 
-### 6. AI Features Implementation
-- Implement rate limiting for API calls
+### 8. AI Features
+- Implement rate limiting
 - Cache responses when appropriate
 - Handle errors gracefully
-- Log important events for debugging
+- Log important events
 
 ## Working with the Codebase
 
-### Starting Development
-1. Clone the repository
-2. Install dependencies using packager_install_tool
-3. Set up required environment variables
-4. Start the development server with `npm run dev`
+### Database Operations
+1. Always use query builder:
+   ```typescript
+   // Correct
+   return await db.query.users.findFirst({
+     where: eq(users.id, id)
+   });
+   ```
+2. Handle errors consistently:
+   ```typescript
+   try {
+     // Database operation
+   } catch (error) {
+     console.error('Operation failed:', error);
+     throw error;
+   }
+   ```
+3. Use transactions when needed
+4. Implement proper connection pooling
 
-### Making Changes
-1. Create feature branches
-2. Follow TypeScript best practices
-3. Test thoroughly before merging
-4. Update documentation as needed
+### Session Management
+1. Implement health checks:
+   ```typescript
+   setInterval(async () => {
+     if (clientManager.isConnected()) {
+       try {
+         const client = await clientManager.getClient();
+         await client.getMe();
+       } catch (error) {
+         await clientManager.cleanup();
+       }
+     }
+   }, 60 * 1000);
+   ```
 
-### Deployment
-- Deploy using Replit
-- Ensure all environment variables are set
-- Verify database migrations
-- Test in staging environment first
-
-## Common Pitfalls to Avoid
-1. Direct database manipulation without ORM
-2. Hardcoding sensitive information
-3. Skipping input validation
-4. Ignoring TypeScript types
-5. Missing error handling
-
-## Additional Resources
-- [Telegram Bot API Documentation](https://core.telegram.org/bots/api)
-- [Drizzle ORM Documentation](https://orm.drizzle.team)
-- [React Query Documentation](https://tanstack.com/query/latest)
+2. Clean up resources properly:
+   ```typescript
+   public async cleanup(): Promise<void> {
+     if (this.cleanupInProgress) {
+       await new Promise(resolve => setTimeout(resolve, 1000));
+       return;
+     }
+     this.cleanupInProgress = true;
+     try {
+       if (this.client?.connected) {
+         await this.client.disconnect();
+       }
+       await this.client?.destroy();
+     } finally {
+       this.client = null;
+       this.session = null;
+       this.connected = false;
+       this.cleanupInProgress = false;
+     }
+   }

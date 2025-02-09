@@ -79,27 +79,21 @@ export const contacts = pgTable("contacts", {
   lastActivityAt: timestamp("last_activity_at"),
 });
 
-// Update the insert schema to include new fields
-export const insertContactSchema = createInsertSchema(contacts).pick({
-  firstName: true,
-  lastName: true,
-  jobTitle: true,
-  department: true,
-  phone: true,
-  email: true,
-  linkedinUrl: true,
-  twitterHandle: true,
-  facebookUrl: true,
-  otherSocialProfiles: true,
-  telegramId: true,
-  telegramUsername: true,
-  companyId: true,
-  preferredContactMethod: true,
-  timeZone: true,
-  availabilityHours: true,
-  status: true,
-  tags: true,
-  customFields: true,
+export const telegramSessions = pgTable("telegram_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  sessionString: text("session_string").notNull(),
+  apiId: text("api_id").notNull(),
+  apiHash: text("api_hash").notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  lastAuthDate: timestamp("last_auth_date"),
+  lastUsed: timestamp("last_used"),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  retryCount: integer("retry_count").default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+  metadata: jsonb("metadata"), // For storing additional session info
 });
 
 export const interactions = pgTable("interactions", {
@@ -189,6 +183,20 @@ export const followupSchedules = pgTable("followup_schedules", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const insertTelegramSessionSchema = createInsertSchema(telegramSessions).pick({
+  userId: true,
+  sessionString: true,
+  apiId: true,
+  apiHash: true,
+  phoneNumber: true,
+  lastAuthDate: true,
+  lastUsed: true,
+  expiresAt: true,
+  isActive: true,
+  retryCount: true,
+  metadata: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -207,6 +215,28 @@ export const insertCompanySchema = createInsertSchema(companies).pick({
   facebookUrl: true,
   annualRevenue: true,
   fundingDetails: true,
+});
+
+export const insertContactSchema = createInsertSchema(contacts).pick({
+  firstName: true,
+  lastName: true,
+  jobTitle: true,
+  department: true,
+  phone: true,
+  email: true,
+  linkedinUrl: true,
+  twitterHandle: true,
+  facebookUrl: true,
+  otherSocialProfiles: true,
+  telegramId: true,
+  telegramUsername: true,
+  companyId: true,
+  preferredContactMethod: true,
+  timeZone: true,
+  availabilityHours: true,
+  status: true,
+  tags: true,
+  customFields: true,
 });
 
 export const insertMessageSchema = createInsertSchema(messages).pick({
@@ -278,7 +308,6 @@ export const insertInteractionSchema = createInsertSchema(interactions).pick({
   nextSteps: true,
 });
 
-// Add message suggestions table
 export const messageSuggestions = pgTable("message_suggestions", {
   id: serial("id").primaryKey(),
   messageId: integer("message_id").notNull(),
@@ -303,6 +332,7 @@ export type InsertCompanySuggestion = z.infer<typeof insertCompanySuggestionSche
 export type InsertFollowupSchedule = z.infer<typeof insertFollowupScheduleSchema>;
 export type InsertInteraction = z.infer<typeof insertInteractionSchema>;
 export type InsertMessageSuggestion = z.infer<typeof insertMessageSuggestionSchema>;
+export type InsertTelegramSession = z.infer<typeof insertTelegramSessionSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
@@ -316,3 +346,4 @@ export type CompanySuggestion = typeof companySuggestions.$inferSelect;
 export type FollowupSchedule = typeof followupSchedules.$inferSelect;
 export type Interaction = typeof interactions.$inferSelect;
 export type MessageSuggestion = typeof messageSuggestions.$inferSelect;
+export type TelegramSession = typeof telegramSessions.$inferSelect;

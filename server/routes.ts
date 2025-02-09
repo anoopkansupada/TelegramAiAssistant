@@ -59,15 +59,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Phone number is required" });
       }
 
-      // Clean up existing client
+      // Check if 2FA is required first
+      const user = await storage.getUserByPhoneNumber(phoneNumber);
+      if (user && user.twoFactorSecret) {
+        return res.status(200).json({ 
+          requires2FA: true,
+          message: "2FA verification required" 
+        });
+      }
+
+      // Only clean up client and session if not requiring 2FA
       await clientManager.cleanup();
 
-      // Clear only Telegram-related session data
+      // Clear only necessary Telegram-related session data
       req.session.telegramSession = undefined;
       req.session.phoneCodeHash = undefined;
-      req.session.phoneNumber = undefined;
-      req.session.requires2FA = undefined;
-      req.session.codeRequestTime = undefined;
+      req.session.phoneNumber = phoneNumber; // Keep the phone number for 2FA check
+      req.session.codeRequestTime = Date.now();
 
       // Save session
       await new Promise<void>((resolve, reject) => {
@@ -77,14 +85,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       });
 
-      // Check if 2FA is required
-      const user = await storage.getUserByPhoneNumber(phoneNumber);
-      if (user && user.twoFactorSecret) {
-        return res.status(200).json({ 
-          requires2FA: true,
-          message: "2FA verification required" 
+      const { codeHash } = await requestVerificationCode(phoneNumber);
+      req.session.phoneCodeHash = codeHash;
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          resolve();
         });
-      }
+      });
 
       res.json({ 
         success: true,
@@ -464,7 +473,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to set up 2FA" });
     }
   });
-
 
   const httpServer = createServer(app);
 

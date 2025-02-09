@@ -7,16 +7,19 @@ import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertChannelInvitationSchema, TelegramChannel, ChannelInvitation } from "@shared/schema";
-import { MessageSquare, Plus, Link as LinkIcon, Calendar, Users, Bot, Loader2 } from "lucide-react";
+import { MessageSquare, Plus, Link as LinkIcon, Calendar, Users, Bot, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ConnectionStatus } from '@/components/connection-status';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function ChannelsPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const { data: channels, isLoading: isLoadingChannels, error: channelsError } = useQuery<TelegramChannel[]>({
     queryKey: ["/api/telegram-channels"],
+    retry: false, // Don't retry on 401
   });
 
   // Get all invitations in a single query
@@ -94,18 +97,47 @@ export default function ChannelsPage() {
     );
   }
 
-  // Show error state
+  // Handle authentication error specifically
+  if (channelsError && (channelsError as any)?.message?.includes('authentication')) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <ConnectionStatus />
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="ml-2">
+            Please connect your Telegram account to access channels
+          </AlertDescription>
+        </Alert>
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center">
+              <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h2 className="text-lg font-medium mb-2">Connect Your Telegram Account</h2>
+              <p className="text-muted-foreground mb-4">
+                You need to connect your Telegram account to manage channels and create invitations
+              </p>
+              <Button onClick={() => setLocation('/telegram-login')}>
+                <Bot className="h-4 w-4 mr-2" />
+                Connect Telegram
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show general error state
   if (channelsError) {
     return (
       <div className="container mx-auto px-4 py-8">
         <ConnectionStatus />
-        <Card>
-          <CardContent className="py-8">
-            <div className="text-center text-destructive">
-              <p>Failed to load channels. Please try again later.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="ml-2">
+            Failed to load channels. Please try again later.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

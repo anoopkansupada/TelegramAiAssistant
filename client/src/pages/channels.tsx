@@ -11,6 +11,7 @@ import { MessageSquare, Plus, Link as LinkIcon, Calendar, Users, Bot, Loader2 } 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
+import { ConnectionStatus } from '@/components/connection-status';
 
 export default function ChannelsPage() {
   const { toast } = useToast();
@@ -85,6 +86,7 @@ export default function ChannelsPage() {
   if (isLoadingChannels || isLoadingInvitations) {
     return (
       <div className="container mx-auto px-4 py-8">
+        <ConnectionStatus />
         <div className="flex items-center justify-center min-h-[200px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -96,6 +98,7 @@ export default function ChannelsPage() {
   if (channelsError) {
     return (
       <div className="container mx-auto px-4 py-8">
+        <ConnectionStatus />
         <Card>
           <CardContent className="py-8">
             <div className="text-center text-destructive">
@@ -111,6 +114,7 @@ export default function ChannelsPage() {
   if (!channels?.length) {
     return (
       <div className="container mx-auto px-4 py-8">
+        <ConnectionStatus />
         <div className="flex items-center gap-2 mb-6">
           <MessageSquare className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold">Telegram Channels</h1>
@@ -139,6 +143,7 @@ export default function ChannelsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <ConnectionStatus />
       <div className="flex items-center gap-2 mb-6">
         <MessageSquare className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold">Telegram Channels</h1>

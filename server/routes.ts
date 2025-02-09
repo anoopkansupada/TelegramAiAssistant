@@ -7,6 +7,7 @@ import { requestVerificationCode, verifyCode, verify2FA } from "./userbot-auth";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
+import { getOrCreateClient } from "./userbot-client";
 
 declare module 'express-session' {
   interface SessionData {
@@ -284,34 +285,26 @@ export function registerRoutes(app: Express): Server {
   // Telegram Chats
   app.get("/api/telegram-chats", async (req, res) => {
     try {
-      // Get session from user's session
       const telegramSession = req.session.telegramSession;
       if (!telegramSession) {
         return res.status(401).json({ message: "Telegram authentication required" });
       }
 
-      const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
-      const apiHash = process.env.TELEGRAM_API_HASH;
+      console.log("[Route] Getting or creating client for session");
+      const client = await getOrCreateClient(telegramSession);
 
-      if (!apiId || !apiHash) {
-        return res.status(500).json({ message: "Telegram API credentials not configured" });
-      }
-
-      // Initialize userbot client with user's session
-      const stringSession = new StringSession(telegramSession);
-      const client = new TelegramClient(stringSession, apiId, apiHash, {
-        connectionRetries: 5,
+      console.log("[Route] Fetching dialogs");
+      const dialogs = await client.getDialogs({
+        limit: 100, // Increased limit to get more chats
       });
 
-      await client.connect();
-
-      // Get all dialogs (chats/channels)
-      const dialogs = await client.getDialogs({});
+      console.log(`[Route] Found ${dialogs.length} dialogs`);
 
       // Process and store each chat
       const chats = await Promise.all(
         dialogs.map(async (dialog) => {
           const chat = dialog.entity;
+          console.log(`[Route] Processing dialog: ${chat?.className} - ${chat?.id}`);
 
           // Only process channels and groups
           if (!chat || !['channel', 'supergroup', 'group'].includes(chat.className)) {
@@ -322,6 +315,7 @@ export function registerRoutes(app: Express): Server {
           let dbChat = await storage.getTelegramChatByTelegramId(chat.id.toString());
 
           if (!dbChat) {
+            console.log(`[Route] Creating new chat record for ${chat.id}`);
             dbChat = await storage.createTelegramChat({
               telegramId: chat.id.toString(),
               title: chat.title || 'Untitled',
@@ -331,15 +325,13 @@ export function registerRoutes(app: Express): Server {
               lastMessageAt: dialog.date ? new Date(dialog.date * 1000) : new Date(),
               metadata: {
                 participantsCount: chat.participantsCount || 0,
-                // Add other relevant metadata
               },
               createdById: req.user!.id,
             });
           } else {
-            // Update existing chat
+            console.log(`[Route] Updating existing chat record for ${chat.id}`);
             dbChat = await storage.updateTelegramChatMetadata(dbChat.id, {
               participantsCount: chat.participantsCount || 0,
-              // Update other metadata
             });
           }
 
@@ -348,12 +340,12 @@ export function registerRoutes(app: Express): Server {
       );
 
       // Filter out null values and send response
-      res.json(chats.filter(chat => chat !== null));
+      const validChats = chats.filter(chat => chat !== null);
+      console.log(`[Route] Returning ${validChats.length} valid chats`);
+      res.json(validChats);
 
-      // Close the client
-      await client.disconnect();
     } catch (error) {
-      console.error("Failed to list chats:", error);
+      console.error("[Route] Failed to list chats:", error);
       res.status(500).json({ message: "Failed to list chats" });
     }
   });
@@ -450,7 +442,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-    // Enhanced Company Suggestions
+  // Enhanced Company Suggestions
   app.get("/api/company-suggestions/auto-confirmable/:minConfidence", async (req, res) => {
     try {
       const suggestions = await storage.listAutoConfirmableSuggestions(

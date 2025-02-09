@@ -331,9 +331,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/test/telegram-message", async (req, res) => {
     try {
-      const message = req.body.message;
-      if (!message) {
-        return res.status(400).json({ message: "Message is required" });
+      const { message } = req.body;
+
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ message: "Message is required and must be a string" });
       }
 
       // Simulate a telegram message

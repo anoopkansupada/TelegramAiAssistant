@@ -35,8 +35,9 @@ export function TestMessage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message: message })
       });
+
       setResponse(result);
     } catch (err: any) {
       setError(err.message || 'Failed to test message');

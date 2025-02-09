@@ -56,11 +56,16 @@ export async function requestVerificationCode(phoneNumber: string) {
     console.log("[Userbot] Formatted phone number:", formattedPhone);
 
     console.log("[Userbot] Sending verification code");
-    const result = await client.sendCode({
+    const result = await client.invoke(new Api.auth.SendCode({
       phoneNumber: formattedPhone,
       apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
       apiHash: process.env.TELEGRAM_API_HASH!,
-    });
+      settings: new Api.CodeSettings({
+        allowFlashcall: false,
+        currentNumber: true,
+        allowAppHash: true,
+      })
+    }));
 
     console.log("[Userbot] Verification code sent successfully, hash received:", result.phoneCodeHash);
     return result.phoneCodeHash;
@@ -102,11 +107,18 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
 
     console.log("[Userbot] Attempting to sign in");
     try {
-      await client.signIn({
+      const signInResult = await client.invoke(new Api.auth.SignIn({
         phoneNumber: formattedPhone,
-        phoneCode: code,
         phoneCodeHash: phoneCodeHash,
-      });
+        phoneCode: code
+      }));
+
+      console.log("[Userbot] Sign in result type:", signInResult?.className);
+
+      if (signInResult.className === 'auth.AuthorizationSignUpRequired') {
+        console.error("[Userbot] User not registered on Telegram");
+        throw new Error("User is not registered on Telegram");
+      }
 
       console.log("[Userbot] Saving session");
       const sessionString = client.session.save() as unknown as string;
@@ -144,8 +156,13 @@ export async function verify2FA(password: string) {
       throw new Error("2FA password is required");
     }
 
+    console.log("[Userbot] Getting password info");
+    const passwordInfo = await client.invoke(new Api.account.GetPassword());
+
     console.log("[Userbot] Checking 2FA password");
-    await client.checkPassword(password);
+    await client.invoke(new Api.auth.CheckPassword({
+      password: await client.computePasswordCheck(passwordInfo, password)
+    }));
 
     console.log("[Userbot] 2FA verification successful");
     const sessionString = client.session.save() as unknown as string;

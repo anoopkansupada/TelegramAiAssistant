@@ -32,10 +32,7 @@ export function TestMessage() {
 
       const result = await apiRequest<TestResponse>('/api/test/telegram-message', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: message })
+        body: message
       });
 
       setResponse(result);

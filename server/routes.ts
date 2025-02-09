@@ -331,10 +331,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/test/telegram-message", async (req, res) => {
     try {
-      const { message } = req.body;
+      console.log('Received request body:', req.body);
+      console.log('Request body type:', typeof req.body);
 
-      if (!message || typeof message !== 'string') {
-        return res.status(400).json({ message: "Message is required and must be a string" });
+      let message;
+      if (typeof req.body === 'string') {
+        message = req.body;
+      } else if (req.body && typeof req.body.message === 'string') {
+        message = req.body.message;
+      } else {
+        console.log('Invalid message format received:', req.body);
+        return res.status(400).json({ 
+          message: "Message is required and must be a string",
+          received: req.body
+        });
       }
 
       // Simulate a telegram message
@@ -376,7 +386,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
     } catch (error: any) {
-      console.error("[Route] Test message error:", error);
+      console.error("Test message error details:", {
+        error: error.message,
+        stack: error.stack,
+        body: req.body
+      });
       res.status(500).json({ 
         message: "Failed to process test message",
         error: error.message 

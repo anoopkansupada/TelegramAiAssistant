@@ -37,15 +37,18 @@ export function AISuggestions({
       setLoading(true);
       setError(null);
       try {
+        const formData = new FormData();
+        formData.append('message', message);
+        if (contactInfo) {
+          formData.append('contactInfo', JSON.stringify(contactInfo));
+        }
+        if (previousMessages.length > 0) {
+          formData.append('previousMessages', JSON.stringify(previousMessages));
+        }
+
         const response = await apiRequest<SuggestionsResponse>('/api/suggestions', {
           method: 'POST',
-          body: {
-            message,
-            context: {
-              contactInfo,
-              previousMessages,
-            },
-          },
+          body: formData
         });
         setSuggestions(response.suggestions);
       } catch (err) {
@@ -59,7 +62,7 @@ export function AISuggestions({
     if (message) {
       fetchSuggestions();
     }
-  }, [message, contactInfo]);
+  }, [message, contactInfo, previousMessages]);
 
   if (!message) return null;
 

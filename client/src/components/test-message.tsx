@@ -29,12 +29,13 @@ export function TestMessage() {
     try {
       setLoading(true);
       setError(null);
-      const formData = new FormData();
-      formData.append('message', message);
 
       const result = await apiRequest<TestResponse>('/api/test/telegram-message', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message })
       });
       setResponse(result);
     } catch (err: any) {
@@ -46,63 +47,65 @@ export function TestMessage() {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Test Telegram Message Processing</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Test Message</label>
-          <Textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Enter a test message..."
-            className="min-h-[100px]"
-          />
-        </div>
-
-        <Button 
-          onClick={handleTest}
-          disabled={!message || loading}
-        >
-          {loading ? 'Processing...' : 'Test Message'}
-        </Button>
-
-        {error && (
-          <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-            {error}
+    <div className="max-w-2xl mx-auto p-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Test Telegram Message Processing</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Test Message</label>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Enter a test message..."
+              className="min-h-[100px]"
+            />
           </div>
-        )}
 
-        {response && (
-          <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-md">
-              <h3 className="font-medium mb-2">Message Details:</h3>
-              <p>Content: {response.message.content}</p>
-              <p>Sentiment: {response.message.sentiment}</p>
-            </div>
+          <Button 
+            onClick={handleTest}
+            disabled={!message || loading}
+          >
+            {loading ? 'Processing...' : 'Test Message'}
+          </Button>
 
-            <div className="p-4 bg-muted rounded-md">
-              <h3 className="font-medium mb-2">Generated Suggestions:</h3>
-              {response.suggestions.length > 0 ? (
-                <ul className="list-disc pl-4">
-                  {response.suggestions.map((suggestion, i) => (
-                    <li key={i} className="mb-2">{suggestion}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No suggestions generated</p>
-              )}
+          {error && (
+            <div className="p-4 bg-destructive/10 text-destructive rounded-md">
+              {error}
             </div>
+          )}
 
-            <div className="p-4 bg-muted rounded-md">
-              <h3 className="font-medium mb-2">Contact Info:</h3>
-              <p>Name: {response.contact.firstName} {response.contact.lastName}</p>
-              <p>Job Title: {response.contact.jobTitle}</p>
+          {response && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-md">
+                <h3 className="font-medium mb-2">Message Details:</h3>
+                <p>Content: {response.message.content}</p>
+                <p>Sentiment: {response.message.sentiment}</p>
+              </div>
+
+              <div className="p-4 bg-muted rounded-md">
+                <h3 className="font-medium mb-2">Generated Suggestions:</h3>
+                {response.suggestions.length > 0 ? (
+                  <ul className="list-disc pl-4">
+                    {response.suggestions.map((suggestion, i) => (
+                      <li key={i} className="mb-2">{suggestion}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No suggestions generated</p>
+                )}
+              </div>
+
+              <div className="p-4 bg-muted rounded-md">
+                <h3 className="font-medium mb-2">Contact Info:</h3>
+                <p>Name: {response.contact.firstName} {response.contact.lastName}</p>
+                <p>Job Title: {response.contact.jobTitle}</p>
+              </div>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

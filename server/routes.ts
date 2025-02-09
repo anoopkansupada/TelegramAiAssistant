@@ -4,6 +4,9 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { sendAnnouncement, generateChannelInviteLink, revokeChannelInviteLink } from "./telegram";
 import { requestVerificationCode, verifyCode, verify2FA } from "./userbot-auth";
+import { TelegramClient } from "telegram";
+import { StringSession } from "telegram/sessions";
+import { Api } from "telegram/tl";
 
 declare module 'express-session' {
   interface SessionData {
@@ -281,8 +284,74 @@ export function registerRoutes(app: Express): Server {
   // Telegram Chats
   app.get("/api/telegram-chats", async (req, res) => {
     try {
-      const chats = await storage.listTelegramChats();
-      res.json(chats);
+      // Get session from user's session
+      const telegramSession = req.session.telegramSession;
+      if (!telegramSession) {
+        return res.status(401).json({ message: "Telegram authentication required" });
+      }
+
+      const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
+      const apiHash = process.env.TELEGRAM_API_HASH;
+
+      if (!apiId || !apiHash) {
+        return res.status(500).json({ message: "Telegram API credentials not configured" });
+      }
+
+      // Initialize userbot client with user's session
+      const stringSession = new StringSession(telegramSession);
+      const client = new TelegramClient(stringSession, apiId, apiHash, {
+        connectionRetries: 5,
+      });
+
+      await client.connect();
+
+      // Get all dialogs (chats/channels)
+      const dialogs = await client.getDialogs({});
+
+      // Process and store each chat
+      const chats = await Promise.all(
+        dialogs.map(async (dialog) => {
+          const chat = dialog.entity;
+
+          // Only process channels and groups
+          if (!chat || !['channel', 'supergroup', 'group'].includes(chat.className)) {
+            return null;
+          }
+
+          // Get or create chat in database
+          let dbChat = await storage.getTelegramChatByTelegramId(chat.id.toString());
+
+          if (!dbChat) {
+            dbChat = await storage.createTelegramChat({
+              telegramId: chat.id.toString(),
+              title: chat.title || 'Untitled',
+              type: chat.className,
+              status: 'pending',
+              unreadCount: dialog.unreadCount || 0,
+              lastMessageAt: dialog.date ? new Date(dialog.date * 1000) : new Date(),
+              metadata: {
+                participantsCount: chat.participantsCount || 0,
+                // Add other relevant metadata
+              },
+              createdById: req.user!.id,
+            });
+          } else {
+            // Update existing chat
+            dbChat = await storage.updateTelegramChatMetadata(dbChat.id, {
+              participantsCount: chat.participantsCount || 0,
+              // Update other metadata
+            });
+          }
+
+          return dbChat;
+        })
+      );
+
+      // Filter out null values and send response
+      res.json(chats.filter(chat => chat !== null));
+
+      // Close the client
+      await client.disconnect();
     } catch (error) {
       console.error("Failed to list chats:", error);
       res.status(500).json({ message: "Failed to list chats" });

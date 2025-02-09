@@ -9,19 +9,11 @@ import {
   LogOut,
   Search,
   Plus,
-  ChevronDown,
-  BellIcon,
+  Bot,
   Command,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Header } from "@/pages/components/Header";
 import { Footer } from "@/components/Footer";
 
@@ -51,6 +43,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       href: "/companies",
       icon: Building2,
       current: location === "/companies",
+    },
+    {
+      name: "Telegram Auth",
+      href: "/telegram-login",
+      icon: Bot,
+      current: location === "/telegram-login",
     },
   ];
 

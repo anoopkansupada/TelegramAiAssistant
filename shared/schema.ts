@@ -8,18 +8,51 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
 });
 
-export const contacts = pgTable("contacts", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  telegramId: text("telegram_id").notNull().unique(),
-  companyId: integer("company_id"),
-  createdById: integer("created_by_id").notNull(),
-});
-
 export const companies = pgTable("companies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  industry: text("industry"),
+  size: text("size"),
+  location: text("location"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  linkedinUrl: text("linkedin_url"),
+  twitterHandle: text("twitter_handle"),
+  facebookUrl: text("facebook_url"),
+  annualRevenue: text("annual_revenue"),
+  fundingDetails: jsonb("funding_details"),
   createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  jobTitle: text("job_title"),
+  department: text("department"),
+  phone: text("phone"),
+  email: text("email"),
+  linkedinUrl: text("linkedin_url"),
+  twitterHandle: text("twitter_handle"),
+  telegramId: text("telegram_id").notNull().unique(),
+  companyId: integer("company_id"),
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const interactions = pgTable("interactions", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").notNull(),
+  type: text("type").notNull(), // meeting, call, email, telegram
+  notes: text("notes"),
+  meetingNotes: text("meeting_notes"),
+  nextSteps: text("next_steps"),
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const messages = pgTable("messages", {
@@ -103,14 +136,32 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
 });
 
-export const insertContactSchema = createInsertSchema(contacts).pick({
-  name: true,
-  telegramId: true,
-  companyId: true,
-});
-
 export const insertCompanySchema = createInsertSchema(companies).pick({
   name: true,
+  industry: true,
+  size: true,
+  location: true,
+  phone: true,
+  email: true,
+  website: true,
+  linkedinUrl: true,
+  twitterHandle: true,
+  facebookUrl: true,
+  annualRevenue: true,
+  fundingDetails: true,
+});
+
+export const insertContactSchema = createInsertSchema(contacts).pick({
+  firstName: true,
+  lastName: true,
+  jobTitle: true,
+  department: true,
+  phone: true,
+  email: true,
+  linkedinUrl: true,
+  twitterHandle: true,
+  telegramId: true,
+  companyId: true,
 });
 
 export const insertMessageSchema = createInsertSchema(messages).pick({
@@ -174,6 +225,14 @@ export const insertFollowupScheduleSchema = createInsertSchema(followupSchedules
   metadata: true,
 });
 
+export const insertInteractionSchema = createInsertSchema(interactions).pick({
+  contactId: true,
+  type: true,
+  notes: true,
+  meetingNotes: true,
+  nextSteps: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -184,6 +243,7 @@ export type InsertChannelInvitation = z.infer<typeof insertChannelInvitationSche
 export type InsertTelegramChat = z.infer<typeof insertTelegramChatSchema>;
 export type InsertCompanySuggestion = z.infer<typeof insertCompanySuggestionSchema>;
 export type InsertFollowupSchedule = z.infer<typeof insertFollowupScheduleSchema>;
+export type InsertInteraction = z.infer<typeof insertInteractionSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
@@ -195,3 +255,4 @@ export type ChannelInvitation = typeof channelInvitations.$inferSelect;
 export type TelegramChat = typeof telegramChats.$inferSelect;
 export type CompanySuggestion = typeof companySuggestions.$inferSelect;
 export type FollowupSchedule = typeof followupSchedules.$inferSelect;
+export type Interaction = typeof interactions.$inferSelect;

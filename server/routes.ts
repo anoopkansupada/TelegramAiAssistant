@@ -9,6 +9,7 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { getOrCreateClient } from "./userbot-client";
+import { generateResponseSuggestions } from "./aiSuggestions";
 
 declare module 'express-session' {
   interface SessionData {
@@ -745,6 +746,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to update followup status:", error);
       res.status(500).json({ message: "Failed to update followup status" });
+    }
+  });
+
+  // Add new route for AI suggestions
+  app.post("/api/suggestions", async (req, res) => {
+    try {
+      const { message, context } = req.body;
+      if (!message) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      const suggestions = await generateResponseSuggestions(message, context);
+      res.json({ suggestions });
+    } catch (error) {
+      console.error("Failed to generate suggestions:", error);
+      res.status(500).json({ message: "Failed to generate suggestions" });
     }
   });
 

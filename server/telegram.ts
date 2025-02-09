@@ -1,6 +1,7 @@
 import { Telegraf } from "telegraf";
 import { storage } from "./storage";
 import sentiment from "sentiment";
+import { generateResponseSuggestions } from "./aiSuggestions";
 
 const sentimentAnalyzer = new sentiment();
 
@@ -10,7 +11,7 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
 
 export const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
-// Store messages with sentiment analysis
+// Update message handling to include suggestion generation
 bot.on("message", async (ctx) => {
   if (!ctx.message || !('text' in ctx.message)) return;
 
@@ -19,7 +20,8 @@ bot.on("message", async (ctx) => {
 
   if (!contact) {
     contact = await storage.createContact({
-      name: ctx.message.from.first_name,
+      firstName: ctx.message.from.first_name,
+      lastName: ctx.message.from.last_name,
       telegramId,
       createdById: 1, // System user
     });
@@ -30,11 +32,38 @@ bot.on("message", async (ctx) => {
   if (sentimentResult.score > 0) sentiment = "positive";
   if (sentimentResult.score < 0) sentiment = "negative";
 
-  await storage.createMessage({
+  // Store the message
+  const message = await storage.createMessage({
     contactId: contact.id,
     content: ctx.message.text,
     sentiment,
   });
+
+  // Generate suggestions for response
+  try {
+    const previousMessages = await storage.getRecentMessages(contact.id, 5);
+    const suggestions = await generateResponseSuggestions(
+      ctx.message.text,
+      {
+        previousMessages: previousMessages.map(msg => ({
+          role: 'user',
+          content: msg.content
+        })),
+        contactInfo: {
+          name: `${contact.firstName} ${contact.lastName || ''}`.trim(),
+          company: contact.company?.name,
+          jobTitle: contact.jobTitle
+        }
+      }
+    );
+
+    // Store suggestions for this message
+    if (suggestions.length > 0) {
+      await storage.createMessageSuggestions(message.id, suggestions);
+    }
+  } catch (error) {
+    console.error('Failed to generate suggestions:', error);
+  }
 });
 
 // Track when bot is added to channels/groups

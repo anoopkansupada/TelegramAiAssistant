@@ -1,6 +1,7 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
+import input from "input";
 
 let client: TelegramClient | null = null;
 
@@ -156,12 +157,21 @@ export async function verify2FA(password: string) {
       throw new Error("2FA password is required");
     }
 
+    // Get account password info
     console.log("[Userbot] Getting password info");
     const passwordInfo = await client.invoke(new Api.account.GetPassword());
 
+    // Prepare the SRP parameters
+    console.log("[Userbot] Preparing SRP parameters");
+    const srpParams = await client._authProvider.secureIn({
+      password,
+      secureSecret: passwordInfo.secureSecret,
+      currentAlgo: passwordInfo.currentAlgo,
+    });
+
     console.log("[Userbot] Checking 2FA password");
     await client.invoke(new Api.auth.CheckPassword({
-      password: await client.computePasswordCheck(passwordInfo, password)
+      password: srpParams
     }));
 
     console.log("[Userbot] 2FA verification successful");

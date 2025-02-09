@@ -12,13 +12,18 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
       throw new Error("Phone number is required");
     }
 
-    // Get a fresh client instance
-    const client = await clientManager.getClient();
-
+    // Format phone number
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     console.log("[Userbot] Formatted phone number:", formattedPhone);
 
+    // Ensure clean state
+    await clientManager.cleanup();
+
+    // Get a fresh client instance
+    const client = await clientManager.getClient();
+
     try {
+      // Request verification code with explicit settings
       const result = await client.invoke(new Api.auth.SendCode({
         phoneNumber: formattedPhone,
         apiId: parseInt(process.env.TELEGRAM_API_ID || "", 10),
@@ -38,10 +43,15 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
       console.log("[Userbot] Initial sendCode error:", error.message);
 
       if (error.errorMessage?.includes('AUTH_RESTART')) {
-        console.log("[Userbot] AUTH_RESTART detected, retrying with fresh client");
-        await clientManager.cleanup();
+        console.log("[Userbot] AUTH_RESTART detected, waiting before retry");
 
+        // Wait for a moment before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Clean up and retry with a fresh client
+        await clientManager.cleanup();
         const newClient = await clientManager.getClient();
+
         const retryResult = await newClient.invoke(new Api.auth.SendCode({
           phoneNumber: formattedPhone,
           apiId: parseInt(process.env.TELEGRAM_API_ID || "", 10),
@@ -57,15 +67,12 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
 
         return retryResult.phoneCodeHash;
       }
+
+      // If it's not an AUTH_RESTART error, rethrow
       throw error;
     }
   } catch (error: any) {
     console.error("[Userbot] Error in requestVerificationCode:", error);
-    console.error("[Userbot] Error details:", {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    });
     throw error;
   }
 }

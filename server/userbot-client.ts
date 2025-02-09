@@ -46,7 +46,7 @@ class TelegramClientManager {
   public async getClient(session?: string): Promise<TelegramClient> {
     try {
       // If we have a client and the session matches, reuse it
-      if (this.client && this.session === session) {
+      if (this.client && this.session === session && this.connected) {
         try {
           const me = await this.client.getMe();
           if (me) {
@@ -69,21 +69,48 @@ class TelegramClientManager {
         throw new Error("Telegram API credentials are required");
       }
 
-      const stringSession = new StringSession(session || "");
       this.logger.info("Creating new client");
 
+      // Create a new session
+      const stringSession = new StringSession(session || "");
+
+      // Initialize client with more conservative settings
       this.client = new TelegramClient(stringSession, apiId, apiHash, {
-        connectionRetries: 5,
+        connectionRetries: 3,
+        autoReconnect: true,
         useWSS: false,
-        deviceModel: "Desktop",
+        deviceModel: "Chrome",
         systemVersion: "Windows 10",
         appVersion: "1.0.0",
         baseLogger: this.logger,
+        timeout: 30000, // 30 seconds timeout
+        requestRetries: 3,
+        floodSleepThreshold: 60,
+        useIPV6: false,
       });
 
-      await this.client.connect();
-      this.session = session || null;
-      this.connected = true;
+      // Connect with retry logic
+      let retries = 0;
+      const maxRetries = 3;
+
+      while (retries < maxRetries) {
+        try {
+          this.logger.info(`Connection attempt ${retries + 1}/${maxRetries}`);
+          await this.client.connect();
+          this.connected = true;
+          this.session = session || null;
+          this.logger.info("Connection successful");
+          break;
+        } catch (error) {
+          retries++;
+          this.logger.error(`Connection attempt ${retries} failed: ${error}`);
+          if (retries === maxRetries) {
+            throw error;
+          }
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+        }
+      }
 
       return this.client;
     } catch (error) {

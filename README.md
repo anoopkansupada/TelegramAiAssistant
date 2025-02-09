@@ -20,6 +20,16 @@ Currently implemented tables:
 - Messages
 - Channels
 - Announcements
+- Telegram Chats
+- Message Suggestions
+- Company Suggestions
+- Follow-up Schedules
+
+### AI Features Status
+- Sentiment Analysis: Implemented
+- Response Suggestions: Implemented but needs refinement
+- Company Detection: Pending
+- Engagement Scoring: Pending
 
 ### Contributing Guidelines
 

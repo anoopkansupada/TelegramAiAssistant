@@ -10,6 +10,7 @@ class TelegramClientManager {
   private session: string | null = null;
   private connected: boolean = false;
   private logger: CustomLogger;
+  private cleanupInProgress: boolean = false;
 
   private constructor() {
     this.logger = new CustomLogger("[TelegramManager]");
@@ -23,24 +24,35 @@ class TelegramClientManager {
   }
 
   public async cleanup(): Promise<void> {
-    this.logger.info("Starting client cleanup");
-    if (this.client) {
-      try {
-        if (this.client.connected) {
-          this.logger.info("Disconnecting existing client");
-          await this.client.disconnect();
-        }
-        this.logger.info("Destroying existing client");
-        await this.client.destroy();
-      } catch (error) {
-        this.logger.error(`Error during cleanup: ${error}`);
-      } finally {
-        this.client = null;
-        this.session = null;
-        this.connected = false;
-      }
+    if (this.cleanupInProgress) {
+      this.logger.info("Cleanup already in progress, waiting...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return;
     }
-    this.logger.info("Cleanup completed");
+
+    this.cleanupInProgress = true;
+    try {
+      this.logger.info("Starting client cleanup");
+      if (this.client) {
+        try {
+          if (this.client.connected) {
+            this.logger.info("Disconnecting existing client");
+            await this.client.disconnect();
+          }
+          this.logger.info("Destroying existing client");
+          await this.client.destroy();
+        } catch (error) {
+          this.logger.error(`Error during cleanup: ${error}`);
+        } finally {
+          this.client = null;
+          this.session = null;
+          this.connected = false;
+        }
+      }
+      this.logger.info("Cleanup completed");
+    } finally {
+      this.cleanupInProgress = false;
+    }
   }
 
   public async getClient(session?: string): Promise<TelegramClient> {
@@ -48,19 +60,14 @@ class TelegramClientManager {
       // If we have a client and the session matches, reuse it
       if (this.client && this.session === session && this.connected) {
         try {
-          const me = await this.client.getMe();
-          if (me) {
-            this.logger.info("Reusing existing client");
-            return this.client;
-          }
+          await this.client.getMe();
+          this.logger.info("Reusing existing client");
+          return this.client;
         } catch (error) {
           this.logger.warn("Existing client check failed, cleaning up");
           await this.cleanup();
         }
       }
-
-      // If we get here, we need a new client
-      await this.cleanup();
 
       const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
       const apiHash = process.env.TELEGRAM_API_HASH;
@@ -70,11 +77,8 @@ class TelegramClientManager {
       }
 
       this.logger.info("Creating new client");
-
-      // Create a new session
       const stringSession = new StringSession(session || "");
 
-      // Initialize client with more conservative settings
       this.client = new TelegramClient(stringSession, apiId, apiHash, {
         connectionRetries: 3,
         autoReconnect: true,
@@ -83,7 +87,7 @@ class TelegramClientManager {
         systemVersion: "Windows 10",
         appVersion: "1.0.0",
         baseLogger: this.logger,
-        timeout: 30000, // 30 seconds timeout
+        timeout: 30000,
         requestRetries: 3,
         floodSleepThreshold: 60,
         useIPV6: false,
@@ -107,7 +111,6 @@ class TelegramClientManager {
           if (retries === maxRetries) {
             throw error;
           }
-          // Wait before retrying
           await new Promise(resolve => setTimeout(resolve, 1000 * retries));
         }
       }
@@ -223,22 +226,22 @@ async function checkAndBroadcastStatus() {
     if (clientManager.isConnected()) {
       logger.debug("Checking connection status...");
       try {
-        const me = await clientManager.getClient().getMe();
-        if (me) {
-          logger.info(`Connection active for user: ${me.username}`);
-          global.broadcastStatus?.({
-            type: 'status',
-            connected: true,
-            user: {
-              id: me.id?.toString() || '',
-              username: me.username || '',
-              firstName: me.firstName
-            },
-            lastChecked: new Date().toISOString()
-          });
-        }
+        const client = await clientManager.getClient();
+        const me = await client.getMe();
+        logger.info(`Connection active for user: ${me?.username}`);
+        global.broadcastStatus?.({
+          type: 'status',
+          connected: true,
+          user: {
+            id: me?.id?.toString() || '',
+            username: me?.username || '',
+            firstName: me?.firstName || ''
+          },
+          lastChecked: new Date().toISOString()
+        });
       } catch (error) {
         logger.warn("Connection check failed");
+        await clientManager.cleanup();
         global.broadcastStatus?.({
           type: 'status',
           connected: false,

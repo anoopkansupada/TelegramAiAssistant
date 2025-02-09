@@ -47,6 +47,188 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
+  // Telegram Authentication Routes
+  app.post("/api/telegram-auth/request-code", async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+
+      // Clean up existing client
+      await clientManager.cleanup();
+
+      // Clear only Telegram-related session data
+      req.session.telegramSession = undefined;
+      req.session.phoneCodeHash = undefined;
+      req.session.phoneNumber = undefined;
+      req.session.requires2FA = undefined;
+      req.session.codeRequestTime = undefined;
+
+      // Save session
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          resolve();
+        });
+      });
+
+      const phoneCodeHash = await requestVerificationCode(phoneNumber);
+
+      // Set new session data
+      req.session.phoneCodeHash = phoneCodeHash;
+      req.session.phoneNumber = phoneNumber;
+      req.session.codeRequestTime = Date.now();
+
+      // Save session
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          resolve();
+        });
+      });
+
+      res.json({ 
+        success: true,
+        message: "Verification code sent. Please enter it within 2 minutes." 
+      });
+    } catch (error: any) {
+      console.error("[Route] Error requesting verification code:", error);
+
+      if (error.message?.includes('AUTH_RESTART')) {
+        return res.status(500).json({
+          message: "Please try requesting the code again",
+          code: "AUTH_RESTART"
+        });
+      }
+
+      res.status(500).json({
+        message: error.message || "Failed to send verification code"
+      });
+    }
+  });
+
+  app.post("/api/telegram-auth/verify", async (req, res) => {
+    try {
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ message: "Verification code is required" });
+      }
+
+      const { phoneNumber, phoneCodeHash, codeRequestTime } = req.session;
+
+      if (!phoneNumber || !phoneCodeHash) {
+        // Clear Telegram-related session data
+        req.session.telegramSession = undefined;
+        req.session.phoneCodeHash = undefined;
+        req.session.phoneNumber = undefined;
+        req.session.requires2FA = undefined;
+        req.session.codeRequestTime = undefined;
+
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            resolve();
+          });
+        });
+
+        return res.status(400).json({
+          message: "Session expired. Please request a new verification code.",
+          code: "SESSION_EXPIRED"
+        });
+      }
+
+      // Check code expiration (2 minutes)
+      const CODE_EXPIRATION_MS = 120000;
+      if (!codeRequestTime || Date.now() - codeRequestTime > CODE_EXPIRATION_MS) {
+        // Clear Telegram-related session data
+        req.session.telegramSession = undefined;
+        req.session.phoneCodeHash = undefined;
+        req.session.phoneNumber = undefined;
+        req.session.requires2FA = undefined;
+        req.session.codeRequestTime = undefined;
+
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            resolve();
+          });
+        });
+
+        return res.status(400).json({ 
+          message: "Verification code expired. Please request a new code.",
+          code: "PHONE_CODE_EXPIRED"
+        });
+      }
+
+      try {
+        const session = await verifyCode(phoneNumber, code, phoneCodeHash);
+
+        // Update session with new data
+        req.session.telegramSession = session;
+        req.session.phoneCodeHash = undefined;
+        req.session.phoneNumber = undefined;
+        req.session.codeRequestTime = undefined;
+
+        // Save session
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            resolve();
+          });
+        });
+
+        res.json({ success: true });
+      } catch (error: any) {
+        if (error.message === 'PHONE_CODE_EXPIRED') {
+          // Clear Telegram-related session data
+          req.session.telegramSession = undefined;
+          req.session.phoneCodeHash = undefined;
+          req.session.phoneNumber = undefined;
+          req.session.requires2FA = undefined;
+          req.session.codeRequestTime = undefined;
+
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err) => {
+              if (err) reject(err);
+              resolve();
+            });
+          });
+
+          return res.status(400).json({ 
+            message: "Verification code expired. Please request a new code.",
+            code: "PHONE_CODE_EXPIRED"
+          });
+        }
+
+        if (error.message === 'PHONE_CODE_INVALID') {
+          return res.status(400).json({
+            message: "Invalid verification code. Please try again.",
+            code: "PHONE_CODE_INVALID"
+          });
+        }
+
+        if (error.message === '2FA_REQUIRED') {
+          req.session.requires2FA = true;
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err) => {
+              if (err) reject(err);
+              resolve();
+            });
+          });
+          return res.json({ requires2FA: true });
+        }
+
+        throw error;
+      }
+    } catch (error: any) {
+      console.error("[Route] Error verifying code:", error);
+      res.status(500).json({
+        message: error.message || "Failed to verify code"
+      });
+    }
+  });
+
   // Contacts
   app.get("/api/contacts", async (req, res) => {
     const contacts = await storage.listContacts();
@@ -117,184 +299,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[Route] Failed to list channels:", error);
       res.status(500).json({ message: "Failed to list channels" });
-    }
-  });
-
-  // Userbot Authentication Routes
-  app.post("/api/telegram-auth/request-code", async (req, res) => {
-    try {
-      console.log("[Route] Received request-code request:", {
-        body: req.body,
-        session: req.session
-      });
-
-      const { phoneNumber } = req.body;
-      if (!phoneNumber) {
-        console.error("[Route] Phone number missing in request");
-        return res.status(400).json({ message: "Phone number is required" });
-      }
-
-      // Clear any existing auth state
-      await clientManager.cleanup();
-      req.session.phoneCodeHash = undefined;
-      req.session.phoneNumber = undefined;
-      req.session.telegramSession = undefined;
-      req.session.requires2FA = undefined;
-      req.session.codeRequestTime = undefined;
-
-      // Save session before proceeding
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) reject(err);
-          resolve();
-        });
-      });
-
-      console.log("[Route] Requesting verification code for:", phoneNumber);
-      const phoneCodeHash = await requestVerificationCode(phoneNumber);
-
-      console.log("[Route] Received phone code hash:", phoneCodeHash);
-
-      // Update session with new values
-      req.session.phoneCodeHash = phoneCodeHash;
-      req.session.phoneNumber = phoneNumber;
-      req.session.codeRequestTime = Date.now();
-
-      // Ensure session is saved
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) reject(err);
-          resolve();
-        });
-      });
-
-      console.log("[Route] Updated session:", {
-        phoneCodeHash: !!req.session.phoneCodeHash,
-        phoneNumber: req.session.phoneNumber,
-        codeRequestTime: req.session.codeRequestTime
-      });
-
-      res.json({ 
-        success: true,
-        message: "Verification code sent. Please enter it within 2 minutes." 
-      });
-    } catch (error: any) {
-      console.error("[Route] Error requesting verification code:", error);
-
-      if (error.message?.includes('AUTH_RESTART')) {
-        return res.status(500).json({
-          message: "Please try requesting the code again",
-          code: "AUTH_RESTART"
-        });
-      }
-
-      res.status(500).json({
-        message: error.message || "Failed to send verification code"
-      });
-    }
-  });
-
-  app.post("/api/telegram-auth/verify", async (req, res) => {
-    try {
-      console.log("[Route] Received verify request:", {
-        body: req.body,
-        session: {
-          hasPhoneNumber: !!req.session.phoneNumber,
-          hasPhoneCodeHash: !!req.session.phoneCodeHash,
-          codeRequestTime: req.session.codeRequestTime
-        }
-      });
-
-      const { code } = req.body;
-      const phoneNumber = req.session.phoneNumber;
-      const phoneCodeHash = req.session.phoneCodeHash;
-      const codeRequestTime = req.session.codeRequestTime;
-
-      if (!phoneNumber || !phoneCodeHash) {
-        return res.status(400).json({
-          message: "Please request a new verification code"
-        });
-      }
-
-      // Check if code has expired (2 minutes)
-      const CODE_EXPIRATION_MS = 120000; // 2 minutes in milliseconds
-      if (!codeRequestTime || Date.now() - codeRequestTime > CODE_EXPIRATION_MS) {
-        // Clear the session data for expired code
-        req.session.phoneCodeHash = undefined;
-        req.session.phoneNumber = undefined;
-        req.session.codeRequestTime = undefined;
-
-        // Ensure session is saved
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            resolve();
-          });
-        });
-
-        return res.status(400).json({ 
-          message: "Verification code expired. Please request a new code.",
-          code: "PHONE_CODE_EXPIRED"
-        });
-      }
-
-      try {
-        const session = await verifyCode(phoneNumber, code, phoneCodeHash);
-        console.log("[Route] Verification successful, session received");
-
-        req.session.telegramSession = session;
-
-        // Ensure session is saved
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            resolve();
-          });
-        });
-
-        console.log("[Route] Session stored successfully");
-
-        res.json({ success: true });
-      } catch (error: any) {
-        if (error.message === 'PHONE_CODE_EXPIRED') {
-          // Clear the session data for expired code
-          req.session.phoneCodeHash = undefined;
-          req.session.phoneNumber = undefined;
-          req.session.codeRequestTime = undefined;
-
-          // Ensure session is saved
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((err) => {
-              if (err) reject(err);
-              resolve();
-            });
-          });
-
-          return res.status(400).json({ 
-            message: "Verification code expired. Please request a new code.",
-            code: "PHONE_CODE_EXPIRED"
-          });
-        }
-
-        if (error.message === '2FA_REQUIRED') {
-          req.session.requires2FA = true;
-          // Ensure session is saved
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((err) => {
-              if (err) reject(err);
-              resolve();
-            });
-          });
-          return res.json({ requires2FA: true });
-        }
-
-        throw error;
-      }
-    } catch (error: any) {
-      console.error("[Route] Error verifying code:", error);
-      res.status(500).json({
-        message: error.message || "Failed to verify code"
-      });
     }
   });
 

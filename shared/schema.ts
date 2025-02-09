@@ -33,15 +33,72 @@ export const contacts = pgTable("contacts", {
   lastName: text("last_name"),
   jobTitle: text("job_title"),
   department: text("department"),
+
+  // Contact Details
   phone: text("phone"),
   email: text("email"),
   linkedinUrl: text("linkedin_url"),
   twitterHandle: text("twitter_handle"),
+  facebookUrl: text("facebook_url"),
+  otherSocialProfiles: jsonb("other_social_profiles"), // Store additional social media profiles
+
+  // Telegram Integration
   telegramId: text("telegram_id").notNull().unique(),
+  telegramUsername: text("telegram_username"),
+
+  // Company Association
   companyId: integer("company_id"),
+
+  // Communication Preferences
+  preferredContactMethod: text("preferred_contact_method"), // email, phone, telegram, etc
+  timeZone: text("time_zone"),
+  availabilityHours: jsonb("availability_hours"), // Store working hours/availability
+
+  // Interaction History
+  lastContactedAt: timestamp("last_contacted_at"),
+  meetingNotes: jsonb("meeting_notes"), // Array of meeting notes with timestamps
+  callHistory: jsonb("call_history"), // Array of call logs with timestamps
+  emailHistory: jsonb("email_history"), // Track email interactions
+
+  // Task Management
+  followUpTasks: jsonb("followup_tasks"), // Array of pending tasks
+  reminders: jsonb("reminders"), // Array of upcoming reminders
+
+  // Status and Tags
+  status: text("status").default('active'), // active, inactive, do-not-contact
+  tags: text("tags").array(), // For categorization and filtering
+
+  // Custom Fields
+  customFields: jsonb("custom_fields"), // For organization-specific data
+
+  // Metadata
   createdById: integer("created_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
+  lastActivityAt: timestamp("last_activity_at"),
+});
+
+// Update the insert schema to include new fields
+export const insertContactSchema = createInsertSchema(contacts).pick({
+  firstName: true,
+  lastName: true,
+  jobTitle: true,
+  department: true,
+  phone: true,
+  email: true,
+  linkedinUrl: true,
+  twitterHandle: true,
+  facebookUrl: true,
+  otherSocialProfiles: true,
+  telegramId: true,
+  telegramUsername: true,
+  companyId: true,
+  preferredContactMethod: true,
+  timeZone: true,
+  availabilityHours: true,
+  status: true,
+  tags: true,
+  customFields: true,
 });
 
 export const interactions = pgTable("interactions", {
@@ -149,19 +206,6 @@ export const insertCompanySchema = createInsertSchema(companies).pick({
   facebookUrl: true,
   annualRevenue: true,
   fundingDetails: true,
-});
-
-export const insertContactSchema = createInsertSchema(contacts).pick({
-  firstName: true,
-  lastName: true,
-  jobTitle: true,
-  department: true,
-  phone: true,
-  email: true,
-  linkedinUrl: true,
-  twitterHandle: true,
-  telegramId: true,
-  companyId: true,
 });
 
 export const insertMessageSchema = createInsertSchema(messages).pick({

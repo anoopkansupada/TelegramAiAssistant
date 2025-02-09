@@ -40,7 +40,27 @@ export default function TelegramLogin() {
     resolver: zodResolver(telegramAuthSchema),
   });
 
-  // WebSocket connection for real-time status updates
+  // Add function to fetch channels
+  const fetchChannels = async () => {
+    try {
+      console.log("Fetching Telegram chats...");
+      const response = await fetch('/api/telegram-chats');
+      if (!response.ok) {
+        throw new Error('Failed to fetch chats');
+      }
+      const data = await response.json();
+      console.log("Received chats:", data);
+    } catch (error) {
+      console.error("Error fetching chats:", error);
+      toast({
+        title: "Failed to fetch chats",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Modify the useEffect to fetch channels when connected
   useEffect(() => {
     // Check initial status
     fetch('/api/telegram-auth/status')
@@ -50,6 +70,7 @@ export default function TelegramLogin() {
         if (data.connected) {
           setAwaitingCode(false);
           setRequires2FA(false);
+          fetchChannels(); // Fetch channels when connected
         }
       });
 
@@ -64,6 +85,7 @@ export default function TelegramLogin() {
         if (data.connected) {
           setAwaitingCode(false);
           setRequires2FA(false);
+          fetchChannels(); // Fetch channels when connection status updates
         }
       }
     };
@@ -76,93 +98,6 @@ export default function TelegramLogin() {
       ws.close();
     };
   }, []);
-
-  const onSubmit = async (data: TelegramAuthForm) => {
-    try {
-      if (!awaitingCode) {
-        // First step: Send phone number
-        const response = await fetch("/api/telegram-auth/request-code", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ phoneNumber: data.phoneNumber }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to send verification code");
-        }
-
-        setAwaitingCode(true);
-        toast({
-          title: "Verification code sent",
-          description: "Please check your Telegram messages for the code",
-        });
-      } else if (!requires2FA) {
-        // Second step: Verify code
-        const response = await fetch("/api/telegram-auth/verify", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            phoneNumber: data.phoneNumber,
-            code: data.code,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Invalid verification code");
-        }
-
-        const result = await response.json();
-
-        if (result.requires2FA) {
-          setRequires2FA(true);
-          toast({
-            title: "2FA Required",
-            description: "Please enter your 2FA password",
-          });
-          return;
-        }
-
-        toast({
-          title: "Successfully authenticated",
-          description: "Your Telegram account is now connected!",
-        });
-
-        setLocation("/channels");
-      } else {
-        // Third step: Verify 2FA
-        const response = await fetch("/api/telegram-auth/verify-2fa", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            password: data.password,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Invalid 2FA password");
-        }
-
-        toast({
-          title: "Successfully authenticated",
-          description: "Your Telegram account is now connected!",
-        });
-
-        setLocation("/channels");
-      }
-    } catch (error) {
-      toast({
-        title: "Authentication failed",
-        description: error instanceof Error ? error.message : "Please try again",
-        variant: "destructive",
-      });
-    }
-  };
 
   // If already connected, show status and option to disconnect
   if (status?.connected) {
@@ -189,8 +124,8 @@ export default function TelegramLogin() {
               <Button onClick={() => setLocation('/channels')} className="flex-1">
                 View Channels
               </Button>
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={async () => {
                   await fetch('/api/telegram-auth/logout', { method: 'POST' });
                   window.location.reload();
@@ -232,8 +167,8 @@ export default function TelegramLogin() {
                   <FormItem>
                     <FormLabel>Phone Number</FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
+                      <Input
+                        {...field}
                         placeholder="+1234567890"
                         disabled={awaitingCode}
                       />
@@ -251,8 +186,8 @@ export default function TelegramLogin() {
                     <FormItem>
                       <FormLabel>Verification Code</FormLabel>
                       <FormControl>
-                        <Input 
-                          {...field} 
+                        <Input
+                          {...field}
                           placeholder="Enter code from Telegram"
                         />
                       </FormControl>
@@ -270,8 +205,8 @@ export default function TelegramLogin() {
                     <FormItem>
                       <FormLabel>2FA Password</FormLabel>
                       <FormControl>
-                        <Input 
-                          {...field} 
+                        <Input
+                          {...field}
                           type="password"
                           placeholder="Enter your 2FA password"
                         />
@@ -289,7 +224,7 @@ export default function TelegramLogin() {
           </Form>
 
           <p className="text-sm text-muted-foreground mt-4 text-center">
-            {requires2FA 
+            {requires2FA
               ? "Enter your Two-Factor Authentication password"
               : "You'll need to provide your Telegram account's phone number to enable userbot features"}
           </p>

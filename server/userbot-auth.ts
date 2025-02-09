@@ -29,7 +29,7 @@ export async function initializeUserbot() {
 
     console.log("[Userbot] Client instance created successfully");
     return client;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Userbot] Failed to initialize client:", error);
     throw error;
   }
@@ -38,6 +38,10 @@ export async function initializeUserbot() {
 export async function requestVerificationCode(phoneNumber: string) {
   try {
     console.log("[Userbot] Starting verification code request for phone:", phoneNumber);
+
+    if (!phoneNumber) {
+      throw new Error("Phone number is required");
+    }
 
     if (!client) {
       console.log("[Userbot] Client not initialized, creating new instance");
@@ -48,23 +52,24 @@ export async function requestVerificationCode(phoneNumber: string) {
     await client.connect();
     console.log("[Userbot] Client connected successfully");
 
-    // Format phone number to ensure it starts with '+'
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     console.log("[Userbot] Formatted phone number:", formattedPhone);
 
     console.log("[Userbot] Sending verification code");
-    const { phoneCodeHash } = await client.sendCode({
+    const { phoneCodeHash } = await client.invoke(new Api.auth.SendCode({
+      phoneNumber: formattedPhone,
       apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
       apiHash: process.env.TELEGRAM_API_HASH!,
-      phoneNumber: formattedPhone,
-      settings: {
-        _: "codeSettings",
-      }
-    });
+      settings: new Api.CodeSettings({
+        allowFlashcall: false,
+        currentNumber: true,
+        allowAppHash: true,
+      })
+    }));
 
     console.log("[Userbot] Verification code sent successfully, hash received:", phoneCodeHash);
     return phoneCodeHash;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Userbot] Error in requestVerificationCode:", error);
     console.error("[Userbot] Error details:", {
       name: error.name,
@@ -78,15 +83,19 @@ export async function requestVerificationCode(phoneNumber: string) {
 export async function verifyCode(phoneNumber: string, code: string, phoneCodeHash: string) {
   try {
     console.log("[Userbot] Starting code verification process");
-    console.log("[Userbot] Parameters:", { 
+    console.log("[Userbot] Parameters:", {
       phoneNumber,
       codeLength: code?.length,
-      hashLength: phoneCodeHash?.length 
+      hashLength: phoneCodeHash?.length
     });
 
     if (!client) {
       console.error("[Userbot] Client not initialized for verification");
       throw new Error("Client not initialized");
+    }
+
+    if (!phoneNumber || !code || !phoneCodeHash) {
+      throw new Error("Missing required parameters for verification");
     }
 
     console.log("[Userbot] Connecting client for verification");
@@ -97,25 +106,30 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
     console.log("[Userbot] Formatted phone for verification:", formattedPhone);
 
     console.log("[Userbot] Attempting to sign in");
-    const signInResult = await client.signIn({
-      phoneNumber: formattedPhone,
-      phoneCodeHash,
-      phoneCode: code,
-    });
+    try {
+      const signInResult = await client.invoke(new Api.auth.SignIn({
+        phoneNumber: formattedPhone,
+        phoneCodeHash,
+        phoneCode: code
+      }));
 
-    console.log("[Userbot] Sign in result type:", signInResult?.constructor?.name);
+      console.log("[Userbot] Sign in result type:", signInResult?.className);
 
-    if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
-      console.error("[Userbot] User not registered on Telegram");
-      throw new Error("User is not registered on Telegram");
+      if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
+        console.error("[Userbot] User not registered on Telegram");
+        throw new Error("User is not registered on Telegram");
+      }
+
+      console.log("[Userbot] Saving session");
+      const sessionString = client.session.save() as unknown as string;
+      console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
+
+      return sessionString;
+    } catch (signInError: any) {
+      console.error("[Userbot] Sign in error:", signInError);
+      throw signInError;
     }
-
-    console.log("[Userbot] Saving session");
-    const session = client.session.save() as string;
-    console.log("[Userbot] Session saved successfully, length:", session?.length);
-
-    return session;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Userbot] Error in verifyCode:", error);
     console.error("[Userbot] Error details:", {
       name: error.name,

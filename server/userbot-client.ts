@@ -32,13 +32,12 @@ interface StatusUpdate {
   lastChecked: string;
 }
 
-// Custom logger implementation that extends Logger
-class CustomLogger extends Logger {
+// Custom logger implementation that implements Logger interface
+class CustomLogger implements Logger {
   private prefix: string;
-  private _logLevel: LogLevel = LogLevel.INFO;
+  logLevel: LogLevel = LogLevel.INFO;  // Required by Logger interface
 
   constructor(prefix: string = "[UserBot]") {
-    super();
     this.prefix = prefix;
   }
 
@@ -47,7 +46,7 @@ class CustomLogger extends Logger {
     return `${timestamp} ${this.prefix} [${LogLevel[level]}] ${message}`;
   }
 
-  log(level: LogLevel, message: string): void {
+  _log(level: LogLevel, message: string): void {
     const formattedMessage = this.formatLog(level, message);
     switch (level) {
       case LogLevel.DEBUG:
@@ -55,9 +54,6 @@ class CustomLogger extends Logger {
         break;
       case LogLevel.INFO:
         console.info('\x1b[32m' + formattedMessage + '\x1b[0m');
-        break;
-      case LogLevel.WARNING:
-        console.warn('\x1b[33m' + formattedMessage + '\x1b[0m');
         break;
       case LogLevel.ERROR:
         console.error('\x1b[31m' + formattedMessage + '\x1b[0m');
@@ -68,47 +64,63 @@ class CustomLogger extends Logger {
   }
 
   setLevel(level: LogLevel): void {
-    this._logLevel = level;
+    this.logLevel = level;
   }
 
   getLevel(): LogLevel {
-    return this._logLevel;
+    return this.logLevel;
+  }
+
+  log(level: LogLevel, message: string): void {
+    this._log(level, message);
   }
 
   debug(message: string): void {
-    if (this._logLevel <= LogLevel.DEBUG) {
-      this.log(LogLevel.DEBUG, message);
+    if (this.logLevel <= LogLevel.DEBUG) {
+      this._log(LogLevel.DEBUG, message);
     }
   }
 
   info(message: string): void {
-    if (this._logLevel <= LogLevel.INFO) {
-      this.log(LogLevel.INFO, message);
+    if (this.logLevel <= LogLevel.INFO) {
+      this._log(LogLevel.INFO, message);
     }
   }
 
   warn(message: string): void {
-    if (this._logLevel <= LogLevel.WARNING) {
-      this.log(LogLevel.WARNING, message);
+    if (this.logLevel <= LogLevel.ERROR) {
+      this._log(LogLevel.ERROR, message);
     }
   }
 
   error(message: string): void {
-    this.log(LogLevel.ERROR, message);
+    this._log(LogLevel.ERROR, message);
   }
 
-  // Required by Logger interface
-  get canSend(): boolean {
-    return true;
-  }
-
-  get tzOffset(): number {
-    return new Date().getTimezoneOffset() * 60;
+  canSend(level: LogLevel): boolean {
+    return this.logLevel <= level;
   }
 
   getDateTime(): string {
     return new Date().toISOString();
   }
+
+  format(level: LogLevel, message: string): string {
+    return this.formatLog(level, message);
+  }
+
+  // Required read-only properties
+  readonly tzOffset: number = new Date().getTimezoneOffset() * 60;
+  readonly basePath: string = "./logs";
+  readonly levels = {
+    NONE: LogLevel.NONE,
+    ERROR: LogLevel.ERROR,
+    INFO: LogLevel.INFO,
+    DEBUG: LogLevel.DEBUG
+  };
+  readonly colors = true;
+  readonly isBrowser = false;
+  readonly messageFormat = "[%level] %message";
 }
 
 // Type-safe broadcast status function

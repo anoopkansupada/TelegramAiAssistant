@@ -37,6 +37,10 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
         })
       }));
 
+      if (!result.phoneCodeHash) {
+        throw new Error("Failed to get phone code hash from Telegram");
+      }
+
       console.log("[Userbot] Verification code sent successfully");
       return result.phoneCodeHash;
     } catch (error: any) {
@@ -64,6 +68,10 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
             logoutTokens: []
           })
         }));
+
+        if (!retryResult.phoneCodeHash) {
+          throw new Error("Failed to get phone code hash from Telegram after retry");
+        }
 
         return retryResult.phoneCodeHash;
       }
@@ -100,16 +108,31 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
         phoneCodeHash: phoneCodeHash
       }));
 
+      if (!signInResult) {
+        throw new Error("Sign in failed - no response from Telegram");
+      }
+
       console.log("[Userbot] Sign in successful");
       const sessionString = client.session.save() as unknown as string;
+      if (!sessionString) {
+        throw new Error("Failed to save session");
+      }
       console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
 
       return sessionString;
     } catch (error: any) {
+      console.error("[Userbot] Sign in error:", error);
+
       if (error.errorMessage === 'SESSION_PASSWORD_NEEDED') {
         console.log("[Userbot] 2FA password required");
         throw new Error('2FA_REQUIRED');
       }
+
+      if (error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
+        console.log("[Userbot] Phone code expired");
+        throw new Error('PHONE_CODE_EXPIRED');
+      }
+
       throw error;
     }
   } catch (error: any) {
@@ -143,14 +166,17 @@ export async function verify2FA(password: string): Promise<string> {
       await client.invoke(new Api.auth.CheckPassword({
         password: {
           className: "InputCheckPasswordSRP",
-          srpId: passwordInfo.srpId,
-          A: A.toString('hex'),
-          M1: M1.toString('hex')
+          srpId: passwordInfo.srpId || BigInt(0), // Provide default value for undefined
+          A: Buffer.from(A.toString('hex'), 'hex'),
+          M1: Buffer.from(M1.toString('hex'), 'hex')
         }
       }));
 
       console.log("[Userbot] 2FA verification successful");
       const sessionString = client.session.save() as unknown as string;
+      if (!sessionString) {
+        throw new Error("Failed to save session after 2FA");
+      }
       console.log("[Userbot] Session saved successfully, length:", sessionString?.length);
 
       return sessionString;

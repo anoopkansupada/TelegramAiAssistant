@@ -16,6 +16,7 @@ declare module 'express-session' {
     phoneCodeHash?: string;
     phoneNumber?: string;
     requires2FA?: boolean;
+    codeRequestTime?: number;
   }
 }
 
@@ -134,23 +135,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Clear any existing auth state
+      await clientManager.cleanup();
       req.session.phoneCodeHash = undefined;
       req.session.phoneNumber = undefined;
       req.session.telegramSession = undefined;
       req.session.requires2FA = undefined;
-      await clientManager.cleanup();
+      req.session.codeRequestTime = undefined;
+
+      // Save session before proceeding
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          resolve();
+        });
+      });
 
       console.log("[Route] Requesting verification code for:", phoneNumber);
       const phoneCodeHash = await requestVerificationCode(phoneNumber);
 
       console.log("[Route] Received phone code hash:", phoneCodeHash);
-      // Store the phone code hash in session for verification
+
+      // Update session with new values
       req.session.phoneCodeHash = phoneCodeHash;
       req.session.phoneNumber = phoneNumber;
+      req.session.codeRequestTime = Date.now();
+
+      // Ensure session is saved
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          resolve();
+        });
+      });
 
       console.log("[Route] Updated session:", {
         phoneCodeHash: !!req.session.phoneCodeHash,
-        phoneNumber: req.session.phoneNumber
+        phoneNumber: req.session.phoneNumber,
+        codeRequestTime: req.session.codeRequestTime
       });
 
       res.json({ 
@@ -179,17 +200,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body: req.body,
         session: {
           hasPhoneNumber: !!req.session.phoneNumber,
-          hasPhoneCodeHash: !!req.session.phoneCodeHash
+          hasPhoneCodeHash: !!req.session.phoneCodeHash,
+          codeRequestTime: req.session.codeRequestTime
         }
       });
 
       const { code } = req.body;
       const phoneNumber = req.session.phoneNumber;
       const phoneCodeHash = req.session.phoneCodeHash;
+      const codeRequestTime = req.session.codeRequestTime;
 
       if (!phoneNumber || !phoneCodeHash) {
         return res.status(400).json({
           message: "Please request a new verification code"
+        });
+      }
+
+      // Check if code has expired (2 minutes)
+      const CODE_EXPIRATION_MS = 120000; // 2 minutes in milliseconds
+      if (!codeRequestTime || Date.now() - codeRequestTime > CODE_EXPIRATION_MS) {
+        // Clear the session data for expired code
+        req.session.phoneCodeHash = undefined;
+        req.session.phoneNumber = undefined;
+        req.session.codeRequestTime = undefined;
+
+        // Ensure session is saved
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            resolve();
+          });
+        });
+
+        return res.status(400).json({ 
+          message: "Verification code expired. Please request a new code.",
+          code: "PHONE_CODE_EXPIRED"
         });
       }
 
@@ -198,6 +243,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("[Route] Verification successful, session received");
 
         req.session.telegramSession = session;
+
+        // Ensure session is saved
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            resolve();
+          });
+        });
+
         console.log("[Route] Session stored successfully");
 
         res.json({ success: true });
@@ -206,6 +260,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Clear the session data for expired code
           req.session.phoneCodeHash = undefined;
           req.session.phoneNumber = undefined;
+          req.session.codeRequestTime = undefined;
+
+          // Ensure session is saved
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err) => {
+              if (err) reject(err);
+              resolve();
+            });
+          });
 
           return res.status(400).json({ 
             message: "Verification code expired. Please request a new code.",
@@ -215,6 +278,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (error.message === '2FA_REQUIRED') {
           req.session.requires2FA = true;
+          // Ensure session is saved
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err) => {
+              if (err) reject(err);
+              resolve();
+            });
+          });
           return res.json({ requires2FA: true });
         }
 
@@ -326,13 +396,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('[WebSocket] Client disconnected');
       clients.delete(ws);
     });
+
+    // Handle errors
+    ws.on('error', (error) => {
+      console.error('[WebSocket] Connection error:', error);
+    });
   });
 
   // Export broadcast function to be used by userbot client
   (global as any).broadcastStatus = (status: StatusUpdate) => {
+    const statusJSON = JSON.stringify(status);
     clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(status));
+        try {
+          client.send(statusJSON);
+        } catch (error) {
+          console.error('[WebSocket] Failed to send status update:', error);
+        }
       }
     });
   };

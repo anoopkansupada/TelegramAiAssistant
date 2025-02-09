@@ -66,10 +66,10 @@ export default function TelegramLogin() {
 
         toast({
           title: "Successfully authenticated",
-          description: "Welcome to TelegramCRM!",
+          description: "Your Telegram account is now connected!",
         });
 
-        setLocation("/");
+        setLocation("/channels");
       }
     } catch (error) {
       toast({
@@ -86,7 +86,7 @@ export default function TelegramLogin() {
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-2">
             <BotIcon className="h-6 w-6 text-primary" />
-            <CardTitle className="text-2xl">Connect with Telegram</CardTitle>
+            <CardTitle className="text-2xl">Connect Telegram Account</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -136,7 +136,7 @@ export default function TelegramLogin() {
           </Form>
 
           <p className="text-sm text-muted-foreground mt-4 text-center">
-            Login with your Telegram account to access the userbot features
+            You'll need to provide your Telegram account's phone number to enable userbot features
           </p>
         </CardContent>
       </Card>

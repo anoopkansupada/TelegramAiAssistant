@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertChannelInvitationSchema, TelegramChannel, ChannelInvitation } from "@shared/schema";
-import { MessageSquare, Plus, Link as LinkIcon, Calendar, Users } from "lucide-react";
+import { MessageSquare, Plus, Link as LinkIcon, Calendar, Users, Bot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Link } from "wouter";
 
 export default function ChannelsPage() {
   const { toast } = useToast();
@@ -64,6 +65,35 @@ export default function ChannelsPage() {
     },
   });
 
+  if (!channels?.length) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center gap-2 mb-6">
+          <MessageSquare className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">Telegram Channels</h1>
+        </div>
+
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center">
+              <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h2 className="text-lg font-medium mb-2">Connect Your Telegram Account</h2>
+              <p className="text-muted-foreground mb-4">
+                Connect your Telegram account to manage channels and create invitations
+              </p>
+              <Link href="/telegram-login">
+                <Button>
+                  <Bot className="h-4 w-4 mr-2" />
+                  Connect Telegram
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center gap-2 mb-6">
@@ -72,7 +102,7 @@ export default function ChannelsPage() {
       </div>
 
       <div className="grid gap-4">
-        {channels?.map((channel) => {
+        {channels.map((channel) => {
           const { data: invitations } = useQuery<ChannelInvitation[]>({
             queryKey: [`/api/channels/${channel.id}/invitations`],
           });

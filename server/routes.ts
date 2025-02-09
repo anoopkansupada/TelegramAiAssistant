@@ -143,20 +143,38 @@ export function registerRoutes(app: Express): Server {
   // Userbot Authentication Routes
   app.post("/api/telegram-auth/request-code", async (req, res) => {
     try {
+      console.log("[Route] Received request-code request:", {
+        body: req.body,
+        session: req.session
+      });
+
       const { phoneNumber } = req.body;
       if (!phoneNumber) {
+        console.error("[Route] Phone number missing in request");
         return res.status(400).json({ message: "Phone number is required" });
       }
 
+      console.log("[Route] Requesting verification code for:", phoneNumber);
       const phoneCodeHash = await requestVerificationCode(phoneNumber);
 
+      console.log("[Route] Received phone code hash:", phoneCodeHash);
       // Store the phone code hash in session for verification
       req.session.phoneCodeHash = phoneCodeHash;
       req.session.phoneNumber = phoneNumber;
 
+      console.log("[Route] Updated session:", {
+        phoneCodeHash: !!req.session.phoneCodeHash,
+        phoneNumber: req.session.phoneNumber
+      });
+
       res.json({ success: true });
     } catch (error) {
-      console.error("Error requesting verification code:", error);
+      console.error("[Route] Error requesting verification code:", error);
+      console.error("[Route] Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
       res.status(500).json({
         message: "Failed to send verification code",
         error: error instanceof Error ? error.message : "Unknown error"
@@ -166,24 +184,52 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/telegram-auth/verify", async (req, res) => {
     try {
+      console.log("[Route] Received verify request:", {
+        body: req.body,
+        session: {
+          hasPhoneNumber: !!req.session.phoneNumber,
+          hasPhoneCodeHash: !!req.session.phoneCodeHash
+        }
+      });
+
       const { code } = req.body;
       const phoneNumber = req.session.phoneNumber;
       const phoneCodeHash = req.session.phoneCodeHash;
 
       if (!phoneNumber || !phoneCodeHash) {
+        console.error("[Route] Missing session data:", {
+          hasPhoneNumber: !!phoneNumber,
+          hasPhoneCodeHash: !!phoneCodeHash
+        });
         return res.status(400).json({
           message: "Please request a verification code first"
         });
       }
 
+      console.log("[Route] Verifying code with parameters:", {
+        phoneNumber,
+        codeLength: code?.length,
+        hashLength: phoneCodeHash?.length
+      });
+
       const session = await verifyCode(phoneNumber, code, phoneCodeHash);
+
+      console.log("[Route] Verification successful, session received:", {
+        length: session?.length
+      });
 
       // Store the session
       req.session.telegramSession = session;
 
+      console.log("[Route] Session stored successfully");
       res.json({ success: true });
     } catch (error) {
-      console.error("Error verifying code:", error);
+      console.error("[Route] Error verifying code:", error);
+      console.error("[Route] Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
       res.status(500).json({
         message: "Failed to verify code",
         error: error instanceof Error ? error.message : "Unknown error"

@@ -3,7 +3,35 @@ import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { Logger, LogLevel } from "telegram/extensions/Logger";
 
-// Client management singleton
+class CustomLogger extends Logger {
+  private prefix: string;
+
+  constructor(prefix: string = "[UserBot]") {
+    super();
+    this.prefix = prefix;
+  }
+
+  _log(level: LogLevel, message: string): void {
+    const timestamp = new Date().toISOString();
+    const formattedMessage = `${timestamp} ${this.prefix} [${LogLevel[level]}] ${message}`;
+
+    switch (level) {
+      case LogLevel.DEBUG:
+        console.debug(formattedMessage);
+        break;
+      case LogLevel.INFO:
+        console.info(formattedMessage);
+        break;
+      case LogLevel.ERROR:
+        console.error(formattedMessage);
+        break;
+      default:
+        console.log(formattedMessage);
+    }
+  }
+}
+
+// Client management singleton with improved session handling
 class TelegramClientManager {
   private static instance: TelegramClientManager;
   private client: TelegramClient | null = null;
@@ -11,6 +39,8 @@ class TelegramClientManager {
   private connected: boolean = false;
   private logger: CustomLogger;
   private cleanupInProgress: boolean = false;
+  private lastConnectionAttempt: number = 0;
+  private readonly CONNECTION_RETRY_DELAY = 2000; // 2 seconds
 
   private constructor() {
     this.logger = new CustomLogger("[TelegramManager]");
@@ -55,6 +85,17 @@ class TelegramClientManager {
     }
   }
 
+  private async waitForRetryDelay(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastAttempt = now - this.lastConnectionAttempt;
+    if (timeSinceLastAttempt < this.CONNECTION_RETRY_DELAY) {
+      await new Promise(resolve => 
+        setTimeout(resolve, this.CONNECTION_RETRY_DELAY - timeSinceLastAttempt)
+      );
+    }
+    this.lastConnectionAttempt = Date.now();
+  }
+
   public async getClient(session?: string): Promise<TelegramClient> {
     try {
       // If we have a client and the session matches, reuse it
@@ -68,6 +109,8 @@ class TelegramClientManager {
           await this.cleanup();
         }
       }
+
+      await this.waitForRetryDelay();
 
       const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
       const apiHash = process.env.TELEGRAM_API_HASH;
@@ -83,8 +126,8 @@ class TelegramClientManager {
         connectionRetries: 3,
         autoReconnect: true,
         useWSS: false,
-        deviceModel: "Chrome",
-        systemVersion: "Windows 10",
+        deviceModel: "NodeJS",
+        systemVersion: "1.0.0",
         appVersion: "1.0.0",
         baseLogger: this.logger,
         timeout: 30000,
@@ -127,97 +170,47 @@ class TelegramClientManager {
   }
 }
 
-// Custom logger implementation
-class CustomLogger implements Logger {
-  private prefix: string;
-  private _logLevel: LogLevel = LogLevel.INFO;
+export const clientManager = TelegramClientManager.getInstance();
 
-  constructor(prefix: string = "[UserBot]") {
-    this.prefix = prefix;
-  }
-
-  private formatLog(level: LogLevel, message: string): string {
-    const timestamp = new Date().toISOString();
-    return `${timestamp} ${this.prefix} [${LogLevel[level]}] ${message}`;
-  }
-
-  get logLevel(): LogLevel {
-    return this._logLevel;
-  }
-
-  set logLevel(level: LogLevel) {
-    this._logLevel = level;
-  }
-
-  log(level: LogLevel, message: string): void {
-    if (level >= this._logLevel) {
-      const formattedMessage = this.formatLog(level, message);
-      switch (level) {
-        case LogLevel.DEBUG:
-          console.debug(formattedMessage);
-          break;
-        case LogLevel.INFO:
-          console.info(formattedMessage);
-          break;
-        case LogLevel.ERROR:
-          console.error(formattedMessage);
-          break;
-        default:
-          console.log(formattedMessage);
-      }
+// Start periodic connection checks
+setInterval(async () => {
+  const logger = new CustomLogger();
+  try {
+    if (clientManager.isConnected()) {
+      const client = await clientManager.getClient();
+      await client.getMe();
     }
+  } catch (error) {
+    logger.error(`Connection check failed: ${error}`);
+    await clientManager.cleanup();
   }
+}, 60 * 1000); // Check every minute
 
-  debug(message: string): void {
-    this.log(LogLevel.DEBUG, message);
+export async function disconnectClient(): Promise<void> {
+  const logger = new CustomLogger();
+  try {
+    await clientManager.cleanup();
+    logger.info("Client disconnected successfully");
+  } catch (error) {
+    logger.error(`Error disconnecting client: ${error}`);
   }
-
-  info(message: string): void {
-    this.log(LogLevel.INFO, message);
-  }
-
-  warn(message: string): void {
-    this.log(LogLevel.ERROR, message);
-  }
-
-  error(message: string): void {
-    this.log(LogLevel.ERROR, message);
-  }
-
-  setLevel(level: LogLevel): void {
-    this._logLevel = level;
-  }
-
-  getLevel(): LogLevel {
-    return this._logLevel;
-  }
-
-  canSend(level: LogLevel): boolean {
-    return level >= this._logLevel;
-  }
-
-  getDateTime(): string {
-    return new Date().toISOString();
-  }
-
-  format(level: LogLevel, message: string): string {
-    return this.formatLog(level, message);
-  }
-
-  readonly tzOffset: number = new Date().getTimezoneOffset() * 60;
-  readonly basePath: string = "./logs";
-  readonly levels = {
-    NONE: LogLevel.NONE,
-    ERROR: LogLevel.ERROR,
-    INFO: LogLevel.INFO,
-    DEBUG: LogLevel.DEBUG
-  };
-  readonly colors = true;
-  readonly isBrowser = false;
-  readonly messageFormat = "[%level] %message";
 }
 
-export const clientManager = TelegramClientManager.getInstance();
+// Status broadcast interface
+interface StatusUpdate {
+  type: 'status';
+  connected: boolean;
+  user?: {
+    id: string;
+    username: string;
+    firstName?: string;
+  };
+  lastChecked: string;
+}
+
+declare global {
+  var broadcastStatus: ((status: StatusUpdate) => void) | undefined;
+}
 
 // Check connection and broadcast status
 async function checkAndBroadcastStatus() {
@@ -268,13 +261,3 @@ async function checkAndBroadcastStatus() {
 
 // Start periodic status checks
 setInterval(checkAndBroadcastStatus, 30 * 1000);
-
-export async function disconnectClient(): Promise<void> {
-  const logger = new CustomLogger();
-  try {
-    await clientManager.cleanup();
-    logger.info("Client disconnected successfully");
-  } catch (error) {
-    logger.error(`Error disconnecting client: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}

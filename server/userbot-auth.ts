@@ -4,7 +4,7 @@ import { Api } from "telegram/tl";
 import { computeCheck } from "telegram/Password";
 import { clientManager } from "./userbot-client";
 
-export async function requestVerificationCode(phoneNumber: string): Promise<string> {
+export async function requestVerificationCode(phoneNumber: string): Promise<{ phoneCodeHash: string }> {
   try {
     console.log("[Userbot] Starting verification code request for phone:", phoneNumber);
 
@@ -34,12 +34,14 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
         })
       }));
 
-      if (!result || !result.phoneCodeHash) {
+      // Extract phoneCodeHash from the SentCode response
+      const phoneCodeHash = (result as any).phoneCodeHash;
+      if (!phoneCodeHash) {
         throw new Error("Failed to get phone code hash from Telegram");
       }
 
       console.log("[Userbot] Verification code sent successfully");
-      return result.phoneCodeHash;
+      return { phoneCodeHash };
     } catch (error: any) {
       console.log("[Userbot] Initial sendCode error:", error.message);
 
@@ -66,11 +68,12 @@ export async function requestVerificationCode(phoneNumber: string): Promise<stri
           })
         }));
 
-        if (!retryResult || !retryResult.phoneCodeHash) {
+        const retryPhoneCodeHash = (retryResult as any).phoneCodeHash;
+        if (!retryPhoneCodeHash) {
           throw new Error("Failed to get phone code hash from Telegram after retry");
         }
 
-        return retryResult.phoneCodeHash;
+        return { phoneCodeHash: retryPhoneCodeHash };
       }
 
       throw error;
@@ -114,6 +117,7 @@ export async function verifyCode(phoneNumber: string, code: string, phoneCodeHas
     } catch (error: any) {
       console.error("[Userbot] Sign in error:", error);
 
+      // Map Telegram error codes to our custom errors
       if (error.errorMessage === 'SESSION_PASSWORD_NEEDED') {
         throw new Error('2FA_REQUIRED');
       }
@@ -144,12 +148,14 @@ export async function verify2FA(password: string): Promise<string> {
 
     try {
       const passwordInfo = await client.invoke(new Api.account.GetPassword());
+
+      // Use the official Telegram password computation
       const { A, M1 } = await computeCheck(passwordInfo, password);
 
       await client.invoke(new Api.auth.CheckPassword({
         password: {
           className: "InputCheckPasswordSRP",
-          srpId: passwordInfo.srpId?.toString() || "0",
+          srpId: passwordInfo.srpId?.toString(),
           A: Buffer.from(A),
           M1: Buffer.from(M1)
         }

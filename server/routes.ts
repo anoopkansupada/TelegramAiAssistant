@@ -59,25 +59,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Phone number is required" });
       }
 
-      // Check if 2FA is required first
-      const user = await storage.getUserByPhoneNumber(phoneNumber);
-      if (user && user.twoFactorSecret) {
-        return res.status(200).json({ 
-          requires2FA: true,
-          message: "2FA verification required" 
-        });
-      }
-
-      // Only clean up client and session if not requiring 2FA
+      // Clean up any existing session first
       await clientManager.cleanup();
 
-      // Clear only necessary Telegram-related session data
+      // Clear previous Telegram-related session data
       req.session.telegramSession = undefined;
       req.session.phoneCodeHash = undefined;
-      req.session.phoneNumber = phoneNumber; // Keep the phone number for 2FA check
+      req.session.phoneNumber = phoneNumber;
       req.session.codeRequestTime = Date.now();
 
-      // Save session
+      // Save session before the API call
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => {
           if (err) reject(err);
@@ -85,9 +76,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       });
 
-      const { codeHash } = await requestVerificationCode(phoneNumber);
-      req.session.phoneCodeHash = codeHash;
+      const { phoneCodeHash } = await requestVerificationCode(phoneNumber);
+      req.session.phoneCodeHash = phoneCodeHash;
 
+      // Save updated session
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => {
           if (err) reject(err);
@@ -97,7 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true,
-        message: "Verification code sent. Please enter it within 2 minutes" 
+        message: "Verification code sent. Please enter it within 5 minutes." 
       });
     } catch (error: any) {
       console.error("[Route] Error requesting verification code:", error);
@@ -168,43 +160,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { phoneNumber, phoneCodeHash, codeRequestTime } = req.session;
 
       if (!phoneNumber || !phoneCodeHash) {
-        // Clear Telegram-related session data
-        req.session.telegramSession = undefined;
-        req.session.phoneCodeHash = undefined;
-        req.session.phoneNumber = undefined;
-        req.session.requires2FA = undefined;
-        req.session.codeRequestTime = undefined;
-
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            resolve();
-          });
-        });
-
         return res.status(400).json({
-          message: "Session expired. Please request a new verification code.",
+          message: "Please request a new verification code",
           code: "SESSION_EXPIRED"
         });
       }
 
-      // Check code expiration (2 minutes)
-      const CODE_EXPIRATION_MS = 120000;
+      // Check code expiration (5 minutes instead of 2)
+      const CODE_EXPIRATION_MS = 300000; // 5 minutes
       if (!codeRequestTime || Date.now() - codeRequestTime > CODE_EXPIRATION_MS) {
-        // Clear Telegram-related session data
-        req.session.telegramSession = undefined;
-        req.session.phoneCodeHash = undefined;
-        req.session.phoneNumber = undefined;
-        req.session.requires2FA = undefined;
-        req.session.codeRequestTime = undefined;
-
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            resolve();
-          });
-        });
-
         return res.status(400).json({ 
           message: "Verification code expired. Please request a new code.",
           code: "PHONE_CODE_EXPIRED"
@@ -215,9 +179,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update session with new data
       req.session.telegramSession = session;
-      req.session.phoneCodeHash = undefined;
-      req.session.phoneNumber = undefined;
-      req.session.codeRequestTime = undefined;
+      // Don't clear these until we confirm the session is working
+      // req.session.phoneCodeHash = undefined;
+      // req.session.phoneNumber = undefined;
+      // req.session.codeRequestTime = undefined;
 
       // Save session
       await new Promise<void>((resolve, reject) => {
@@ -229,26 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error: any) {
-      if (error.message === 'PHONE_CODE_EXPIRED') {
-        // Clear Telegram-related session data
-        req.session.telegramSession = undefined;
-        req.session.phoneCodeHash = undefined;
-        req.session.phoneNumber = undefined;
-        req.session.requires2FA = undefined;
-        req.session.codeRequestTime = undefined;
-
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            resolve();
-          });
-        });
-
-        return res.status(400).json({ 
-          message: "Verification code expired. Please request a new code.",
-          code: "PHONE_CODE_EXPIRED"
-        });
-      }
+      console.error("[Route] Error verifying code:", error);
 
       if (error.message === 'PHONE_CODE_INVALID') {
         return res.status(400).json({
@@ -257,7 +203,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.error("[Route] Error verifying code:", error);
       res.status(500).json({
         message: error.message || "Failed to verify code"
       });

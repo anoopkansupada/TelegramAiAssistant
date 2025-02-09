@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 
-const CODE_EXPIRATION_TIME = 120; // 2 minutes in seconds
+const CODE_EXPIRATION_TIME = 300; // 5 minutes in seconds
 
 const telegramAuthSchema = z.object({
   phoneNumber: z.string()
@@ -96,6 +96,14 @@ export default function TelegramLogin() {
 
         if (response.ok) {
           const result = await response.json();
+          if (result.requires2FA) {
+            setRequires2FA(true);
+            toast({ 
+              title: "2FA Required",
+              description: "Please enter your Two-Factor Authentication password"
+            });
+            return;
+          }
           setAwaitingCode(true);
           toast({ 
             title: "Code sent",
@@ -141,7 +149,7 @@ export default function TelegramLogin() {
 
         if (!response.ok) {
           const error = await response.json();
-          if (error.code === "PHONE_CODE_EXPIRED") {
+          if (error.code === "SESSION_EXPIRED" || error.code === "PHONE_CODE_EXPIRED") {
             toast({
               title: "Code Expired",
               description: error.message,

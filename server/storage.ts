@@ -15,90 +15,7 @@ import {
 
 const MemoryStore = createMemoryStore(session);
 
-export interface IStorage {
-  // Auth
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
-  // Contacts
-  getContact(id: number): Promise<Contact | undefined>;
-  getContactByTelegramId(telegramId: string): Promise<Contact | undefined>;
-  listContacts(): Promise<Contact[]>;
-  createContact(contact: InsertContact & { createdById: number }): Promise<Contact>;
-
-  // Companies
-  getCompany(id: number): Promise<Company | undefined>;
-  listCompanies(): Promise<Company[]>;
-  createCompany(company: InsertCompany & { createdById: number }): Promise<Company>;
-
-  // Messages
-  getMessage(id: number): Promise<Message | undefined>;
-  listMessages(contactId: number): Promise<Message[]>;
-  createMessage(message: InsertMessage): Promise<Message>;
-
-  // Announcements  
-  getAnnouncement(id: number): Promise<Announcement | undefined>;
-  listAnnouncements(): Promise<Announcement[]>;
-  createAnnouncement(announcement: InsertAnnouncement & { createdById: number }): Promise<Announcement>;
-
-  // Telegram Channels
-  getTelegramChannel(id: number): Promise<TelegramChannel | undefined>;
-  getTelegramChannelByTelegramId(telegramId: string): Promise<TelegramChannel | undefined>;
-  listTelegramChannels(): Promise<TelegramChannel[]>;
-  createTelegramChannel(channel: InsertTelegramChannel & { createdById: number }): Promise<TelegramChannel>;
-
-  // Channel Invitations
-  getChannelInvitation(id: number): Promise<ChannelInvitation | undefined>;
-  listChannelInvitations(channelId: number): Promise<ChannelInvitation[]>;
-  createChannelInvitation(invitation: InsertChannelInvitation & { createdById: number }): Promise<ChannelInvitation>;
-  updateInvitationStatus(id: number, status: string): Promise<ChannelInvitation>;
-  incrementInvitationUses(id: number): Promise<ChannelInvitation>;
-
-  // Telegram Chats
-  getTelegramChat(id: number): Promise<TelegramChat | undefined>;
-  getTelegramChatByTelegramId(telegramId: string): Promise<TelegramChat | undefined>;
-  listTelegramChats(): Promise<TelegramChat[]>;
-  createTelegramChat(chat: InsertTelegramChat & { createdById: number }): Promise<TelegramChat>;
-  updateTelegramChatStatus(id: number, status: string): Promise<TelegramChat>;
-  updateTelegramChatUnreadCount(id: number, unreadCount: number): Promise<TelegramChat>;
-  updateTelegramChatMetadata(id: number, metadata: any): Promise<TelegramChat>;
-  updateTelegramChatCategory(id: number, category: string, importance: number): Promise<TelegramChat>;
-  listChatsByCategory(category: string): Promise<TelegramChat[]>;
-  listChatsByImportance(minImportance: number): Promise<TelegramChat[]>;
-
-  // Company Suggestions
-  getCompanySuggestion(id: number): Promise<CompanySuggestion | undefined>;
-  listCompanySuggestions(chatId: number): Promise<CompanySuggestion[]>;
-  createCompanySuggestion(suggestion: InsertCompanySuggestion): Promise<CompanySuggestion>;
-  updateCompanySuggestionStatus(id: number, status: string): Promise<CompanySuggestion>;
-  updateCompanySuggestionConfidence(
-    id: number, 
-    confidenceScore: number, 
-    confidenceFactors: any
-  ): Promise<CompanySuggestion>;
-  listAutoConfirmableSuggestions(minConfidence: number): Promise<CompanySuggestion[]>;
-
-  // Followup Schedules
-  getFollowupSchedule(id: number): Promise<FollowupSchedule | undefined>;
-  listFollowupSchedules(chatId: number): Promise<FollowupSchedule[]>;
-  createFollowupSchedule(schedule: InsertFollowupSchedule & { createdById: number }): Promise<FollowupSchedule>;
-  updateFollowupStatus(id: number, status: string): Promise<FollowupSchedule>;
-  listPendingFollowups(): Promise<FollowupSchedule[]>;
-
-  sessionStore: session.Store;
-
-  // Extended User Methods
-  getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined>;
-  getUserById(id: number): Promise<User | undefined>;
-  updateUser(user: User): Promise<User>;
-
-  // Message Related
-  getRecentMessages(contactId: number, limit: number): Promise<Message[]>;
-  createMessageSuggestions(messageId: number, suggestions: string[]): Promise<MessageSuggestion[]>;
-}
-
-export class DatabaseStorage implements IStorage {
+export class DatabaseStorage {
   sessionStore: session.Store;
 
   constructor() {
@@ -109,253 +26,445 @@ export class DatabaseStorage implements IStorage {
 
   // Auth
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      return await db.query.users.findFirst({
+        where: eq(users.id, id)
+      });
+    } catch (error) {
+      console.error('Error in getUser:', error);
+      throw error;
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    try {
+      return await db.query.users.findFirst({
+        where: eq(users.username, username)
+      });
+    } catch (error) {
+      console.error('Error in getUserByUsername:', error);
+      throw error;
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
+    try {
+      const [user] = await db.insert(users).values(insertUser).returning();
+      return user;
+    } catch (error) {
+      console.error('Error in createUser:', error);
+      throw error;
+    }
   }
 
   // Contacts
   async getContact(id: number): Promise<Contact | undefined> {
-    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
-    return contact;
+    try {
+      return await db.query.contacts.findFirst({
+        where: eq(contacts.id, id)
+      });
+    } catch (error) {
+      console.error('Error in getContact:', error);
+      throw error;
+    }
   }
 
   async getContactByTelegramId(telegramId: string): Promise<Contact | undefined> {
-    const [contact] = await db.select().from(contacts).where(eq(contacts.telegramId, telegramId));
-    return contact;
+    try {
+      return await db.query.contacts.findFirst({where: eq(contacts.telegramId, telegramId)});
+    } catch (error) {
+      console.error('Error in getContactByTelegramId:', error);
+      throw error;
+    }
   }
 
   async listContacts(): Promise<Contact[]> {
-    return await db.select().from(contacts);
+    try {
+      return await db.query.contacts.findMany();
+    } catch (error) {
+      console.error('Error in listContacts:', error);
+      throw error;
+    }
   }
 
   async createContact(contact: InsertContact & { createdById: number }): Promise<Contact> {
-    const [newContact] = await db.insert(contacts).values(contact).returning();
-    return newContact;
+    try {
+      const [newContact] = await db.insert(contacts).values(contact).returning();
+      return newContact;
+    } catch (error) {
+      console.error('Error in createContact:', error);
+      throw error;
+    }
   }
 
   // Companies
   async getCompany(id: number): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(eq(companies.id, id));
-    return company;
+    try {
+      return await db.query.companies.findFirst({
+        where: eq(companies.id, id)
+      });
+    } catch (error) {
+      console.error('Error in getCompany:', error);
+      throw error;
+    }
   }
 
   async listCompanies(): Promise<Company[]> {
-    return await db.select().from(companies);
+    try {
+      return await db.query.companies.findMany();
+    } catch (error) {
+      console.error('Error in listCompanies:', error);
+      throw error;
+    }
   }
 
   async createCompany(company: InsertCompany & { createdById: number }): Promise<Company> {
-    const [newCompany] = await db.insert(companies).values(company).returning();
-    return newCompany;
+    try {
+      const [newCompany] = await db.insert(companies).values(company).returning();
+      return newCompany;
+    } catch (error) {
+      console.error('Error in createCompany:', error);
+      throw error;
+    }
   }
 
   // Messages
   async getMessage(id: number): Promise<Message | undefined> {
-    const [message] = await db.select().from(messages).where(eq(messages.id, id));
-    return message;
+    try {
+      return await db.query.messages.findFirst({
+        where: eq(messages.id, id)
+      });
+    } catch (error) {
+      console.error('Error in getMessage:', error);
+      throw error;
+    }
   }
 
   async listMessages(contactId: number): Promise<Message[]> {
-    return await db
-      .select()
-      .from(messages)
-      .where(eq(messages.contactId, contactId))
-      .orderBy(messages.createdAt);
+    try {
+      return await db
+        .select()
+        .from(messages)
+        .where(eq(messages.contactId, contactId))
+        .orderBy(messages.createdAt);
+    } catch (error) {
+      console.error('Error in listMessages:', error);
+      throw error;
+    }
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
-    const [newMessage] = await db.insert(messages).values(message).returning();
-    return newMessage;
+    try {
+      const [newMessage] = await db.insert(messages).values(message).returning();
+      return newMessage;
+    } catch (error) {
+      console.error('Error in createMessage:', error);
+      throw error;
+    }
   }
 
-  // Announcements
+  // Announcements  
   async getAnnouncement(id: number): Promise<Announcement | undefined> {
-    const [announcement] = await db.select().from(announcements).where(eq(announcements.id, id));
-    return announcement;
+    try {
+      return await db.query.announcements.findFirst({where: eq(announcements.id, id)});
+    } catch (error) {
+      console.error('Error in getAnnouncement:', error);
+      throw error;
+    }
   }
 
   async listAnnouncements(): Promise<Announcement[]> {
-    return await db
-      .select()
-      .from(announcements)
-      .orderBy(announcements.createdAt);
+    try {
+      return await db
+        .select()
+        .from(announcements)
+        .orderBy(announcements.createdAt);
+    } catch (error) {
+      console.error('Error in listAnnouncements:', error);
+      throw error;
+    }
   }
 
   async createAnnouncement(announcement: InsertAnnouncement & { createdById: number }): Promise<Announcement> {
-    const [newAnnouncement] = await db.insert(announcements).values(announcement).returning();
-    return newAnnouncement;
+    try {
+      const [newAnnouncement] = await db.insert(announcements).values(announcement).returning();
+      return newAnnouncement;
+    } catch (error) {
+      console.error('Error in createAnnouncement:', error);
+      throw error;
+    }
   }
 
   // Telegram Channels
   async getTelegramChannel(id: number): Promise<TelegramChannel | undefined> {
-    const [channel] = await db.select().from(telegramChannels).where(eq(telegramChannels.id, id));
-    return channel;
+    try {
+      return await db.query.telegramChannels.findFirst({where: eq(telegramChannels.id, id)});
+    } catch (error) {
+      console.error('Error in getTelegramChannel:', error);
+      throw error;
+    }
   }
 
   async getTelegramChannelByTelegramId(telegramId: string): Promise<TelegramChannel | undefined> {
-    const [channel] = await db.select().from(telegramChannels).where(eq(telegramChannels.telegramId, telegramId));
-    return channel;
+    try {
+      return await db.query.telegramChannels.findFirst({where: eq(telegramChannels.telegramId, telegramId)});
+    } catch (error) {
+      console.error('Error in getTelegramChannelByTelegramId:', error);
+      throw error;
+    }
   }
 
   async listTelegramChannels(): Promise<TelegramChannel[]> {
-    return await db.select().from(telegramChannels);
+    try {
+      return await db.query.telegramChannels.findMany();
+    } catch (error) {
+      console.error('Error in listTelegramChannels:', error);
+      throw error;
+    }
   }
 
   async createTelegramChannel(channel: InsertTelegramChannel & { createdById: number }): Promise<TelegramChannel> {
-    const [newChannel] = await db.insert(telegramChannels).values(channel).returning();
-    return newChannel;
+    try {
+      const [newChannel] = await db.insert(telegramChannels).values(channel).returning();
+      return newChannel;
+    } catch (error) {
+      console.error('Error in createTelegramChannel:', error);
+      throw error;
+    }
   }
 
   // Channel Invitations
   async getChannelInvitation(id: number): Promise<ChannelInvitation | undefined> {
-    const [invitation] = await db.select().from(channelInvitations).where(eq(channelInvitations.id, id));
-    return invitation;
+    try {
+      return await db.query.channelInvitations.findFirst({where: eq(channelInvitations.id, id)});
+    } catch (error) {
+      console.error('Error in getChannelInvitation:', error);
+      throw error;
+    }
   }
 
   async listChannelInvitations(channelId: number): Promise<ChannelInvitation[]> {
-    return await db
-      .select()
-      .from(channelInvitations)
-      .where(eq(channelInvitations.channelId, channelId))
-      .orderBy(channelInvitations.createdAt);
+    try {
+      return await db
+        .select()
+        .from(channelInvitations)
+        .where(eq(channelInvitations.channelId, channelId))
+        .orderBy(channelInvitations.createdAt);
+    } catch (error) {
+      console.error('Error in listChannelInvitations:', error);
+      throw error;
+    }
   }
 
   async createChannelInvitation(invitation: InsertChannelInvitation & { createdById: number }): Promise<ChannelInvitation> {
-    const [newInvitation] = await db.insert(channelInvitations)
-      .values({
-        ...invitation,
-        currentUses: 0,
-        createdAt: sql`CURRENT_TIMESTAMP`
-      })
-      .returning();
-    return newInvitation;
+    try {
+      const [newInvitation] = await db.insert(channelInvitations)
+        .values({
+          ...invitation,
+          currentUses: 0,
+          createdAt: sql`CURRENT_TIMESTAMP`
+        })
+        .returning();
+      return newInvitation;
+    } catch (error) {
+      console.error('Error in createChannelInvitation:', error);
+      throw error;
+    }
   }
 
   async updateInvitationStatus(id: number, status: string): Promise<ChannelInvitation> {
-    const [updatedInvitation] = await db.update(channelInvitations)
-      .set({ status })
-      .where(eq(channelInvitations.id, id))
-      .returning();
-    return updatedInvitation;
+    try {
+      const [updatedInvitation] = await db.update(channelInvitations)
+        .set({ status })
+        .where(eq(channelInvitations.id, id))
+        .returning();
+      return updatedInvitation;
+    } catch (error) {
+      console.error('Error in updateInvitationStatus:', error);
+      throw error;
+    }
   }
 
   async incrementInvitationUses(id: number): Promise<ChannelInvitation> {
-    const [updatedInvitation] = await db.update(channelInvitations)
-      .set({
-        currentUses: sql`${channelInvitations.currentUses} + 1`,
-      })
-      .where(eq(channelInvitations.id, id))
-      .returning();
-    return updatedInvitation;
+    try {
+      const [updatedInvitation] = await db.update(channelInvitations)
+        .set({
+          currentUses: sql`${channelInvitations.currentUses} + 1`,
+        })
+        .where(eq(channelInvitations.id, id))
+        .returning();
+      return updatedInvitation;
+    } catch (error) {
+      console.error('Error in incrementInvitationUses:', error);
+      throw error;
+    }
   }
 
   // Telegram Chats
   async getTelegramChat(id: number): Promise<TelegramChat | undefined> {
-    const [chat] = await db.select().from(telegramChats).where(eq(telegramChats.id, id));
-    return chat;
+    try {
+      return await db.query.telegramChats.findFirst({where: eq(telegramChats.id, id)});
+    } catch (error) {
+      console.error('Error in getTelegramChat:', error);
+      throw error;
+    }
   }
 
   async getTelegramChatByTelegramId(telegramId: string): Promise<TelegramChat | undefined> {
-    const [chat] = await db.select().from(telegramChats).where(eq(telegramChats.telegramId, telegramId));
-    return chat;
+    try {
+      return await db.query.telegramChats.findFirst({where: eq(telegramChats.telegramId, telegramId)});
+    } catch (error) {
+      console.error('Error in getTelegramChatByTelegramId:', error);
+      throw error;
+    }
   }
 
   async listTelegramChats(): Promise<TelegramChat[]> {
-    return await db.select().from(telegramChats).orderBy(telegramChats.lastMessageAt);
+    try {
+      return await db.query.telegramChats.findMany({orderBy:{lastMessageAt: 'asc'}});
+    } catch (error) {
+      console.error('Error in listTelegramChats:', error);
+      throw error;
+    }
   }
 
   async createTelegramChat(chat: InsertTelegramChat & { createdById: number }): Promise<TelegramChat> {
-    const [newChat] = await db.insert(telegramChats).values(chat).returning();
-    return newChat;
+    try {
+      const [newChat] = await db.insert(telegramChats).values(chat).returning();
+      return newChat;
+    } catch (error) {
+      console.error('Error in createTelegramChat:', error);
+      throw error;
+    }
   }
 
   async updateTelegramChatStatus(id: number, status: string): Promise<TelegramChat> {
-    const [updatedChat] = await db
-      .update(telegramChats)
-      .set({ status })
-      .where(eq(telegramChats.id, id))
-      .returning();
-    return updatedChat;
+    try {
+      const [updatedChat] = await db
+        .update(telegramChats)
+        .set({ status })
+        .where(eq(telegramChats.id, id))
+        .returning();
+      return updatedChat;
+    } catch (error) {
+      console.error('Error in updateTelegramChatStatus:', error);
+      throw error;
+    }
   }
 
   async updateTelegramChatUnreadCount(id: number, unreadCount: number): Promise<TelegramChat> {
-    const [updatedChat] = await db
-      .update(telegramChats)
-      .set({ unreadCount })
-      .where(eq(telegramChats.id, id))
-      .returning();
-    return updatedChat;
+    try {
+      const [updatedChat] = await db
+        .update(telegramChats)
+        .set({ unreadCount })
+        .where(eq(telegramChats.id, id))
+        .returning();
+      return updatedChat;
+    } catch (error) {
+      console.error('Error in updateTelegramChatUnreadCount:', error);
+      throw error;
+    }
   }
 
   async updateTelegramChatMetadata(id: number, metadata: any): Promise<TelegramChat> {
-    const [updatedChat] = await db
-      .update(telegramChats)
-      .set({ metadata })
-      .where(eq(telegramChats.id, id))
-      .returning();
-    return updatedChat;
+    try {
+      const [updatedChat] = await db
+        .update(telegramChats)
+        .set({ metadata })
+        .where(eq(telegramChats.id, id))
+        .returning();
+      return updatedChat;
+    } catch (error) {
+      console.error('Error in updateTelegramChatMetadata:', error);
+      throw error;
+    }
   }
 
   async updateTelegramChatCategory(id: number, category: string, importance: number): Promise<TelegramChat> {
-    const [updatedChat] = await db
-      .update(telegramChats)
-      .set({ category, importance })
-      .where(eq(telegramChats.id, id))
-      .returning();
-    return updatedChat;
+    try {
+      const [updatedChat] = await db
+        .update(telegramChats)
+        .set({ category, importance })
+        .where(eq(telegramChats.id, id))
+        .returning();
+      return updatedChat;
+    } catch (error) {
+      console.error('Error in updateTelegramChatCategory:', error);
+      throw error;
+    }
   }
 
   async listChatsByCategory(category: string): Promise<TelegramChat[]> {
-    return await db
-      .select()
-      .from(telegramChats)
-      .where(eq(telegramChats.category, category))
-      .orderBy(telegramChats.importance);
+    try {
+      return await db
+        .select()
+        .from(telegramChats)
+        .where(eq(telegramChats.category, category))
+        .orderBy(telegramChats.importance);
+    } catch (error) {
+      console.error('Error in listChatsByCategory:', error);
+      throw error;
+    }
   }
 
   async listChatsByImportance(minImportance: number): Promise<TelegramChat[]> {
-    return await db
-      .select()
-      .from(telegramChats)
-      .where(sql`${telegramChats.importance} >= ${minImportance}`)
-      .orderBy(telegramChats.importance);
+    try {
+      return await db
+        .select()
+        .from(telegramChats)
+        .where(sql`${telegramChats.importance} >= ${minImportance}`)
+        .orderBy(telegramChats.importance);
+    } catch (error) {
+      console.error('Error in listChatsByImportance:', error);
+      throw error;
+    }
   }
 
   // Company Suggestions
   async getCompanySuggestion(id: number): Promise<CompanySuggestion | undefined> {
-    const [suggestion] = await db.select().from(companySuggestions).where(eq(companySuggestions.id, id));
-    return suggestion;
+    try {
+      return await db.query.companySuggestions.findFirst({where: eq(companySuggestions.id, id)});
+    } catch (error) {
+      console.error('Error in getCompanySuggestion:', error);
+      throw error;
+    }
   }
 
   async listCompanySuggestions(chatId: number): Promise<CompanySuggestion[]> {
-    return await db
-      .select()
-      .from(companySuggestions)
-      .where(eq(companySuggestions.chatId, chatId))
-      .orderBy(companySuggestions.confidenceScore);
+    try {
+      return await db
+        .select()
+        .from(companySuggestions)
+        .where(eq(companySuggestions.chatId, chatId))
+        .orderBy(companySuggestions.confidenceScore);
+    } catch (error) {
+      console.error('Error in listCompanySuggestions:', error);
+      throw error;
+    }
   }
 
   async createCompanySuggestion(suggestion: InsertCompanySuggestion): Promise<CompanySuggestion> {
-    const [newSuggestion] = await db.insert(companySuggestions).values(suggestion).returning();
-    return newSuggestion;
+    try {
+      const [newSuggestion] = await db.insert(companySuggestions).values(suggestion).returning();
+      return newSuggestion;
+    } catch (error) {
+      console.error('Error in createCompanySuggestion:', error);
+      throw error;
+    }
   }
 
   async updateCompanySuggestionStatus(id: number, status: string): Promise<CompanySuggestion> {
-    const [updatedSuggestion] = await db
-      .update(companySuggestions)
-      .set({ status })
-      .where(eq(companySuggestions.id, id))
-      .returning();
-    return updatedSuggestion;
+    try {
+      const [updatedSuggestion] = await db
+        .update(companySuggestions)
+        .set({ status })
+        .where(eq(companySuggestions.id, id))
+        .returning();
+      return updatedSuggestion;
+    } catch (error) {
+      console.error('Error in updateCompanySuggestionStatus:', error);
+      throw error;
+    }
   }
 
   async updateCompanySuggestionConfidence(
@@ -363,120 +472,173 @@ export class DatabaseStorage implements IStorage {
     confidenceScore: number,
     confidenceFactors: any
   ): Promise<CompanySuggestion> {
-    const [updatedSuggestion] = await db
-      .update(companySuggestions)
-      .set({ confidenceScore, confidenceFactors })
-      .where(eq(companySuggestions.id, id))
-      .returning();
-    return updatedSuggestion;
+    try {
+      const [updatedSuggestion] = await db
+        .update(companySuggestions)
+        .set({ confidenceScore, confidenceFactors })
+        .where(eq(companySuggestions.id, id))
+        .returning();
+      return updatedSuggestion;
+    } catch (error) {
+      console.error('Error in updateCompanySuggestionConfidence:', error);
+      throw error;
+    }
   }
 
   async listAutoConfirmableSuggestions(minConfidence: number): Promise<CompanySuggestion[]> {
-    return await db
-      .select()
-      .from(companySuggestions)
-      .where(
-        and(
-          eq(companySuggestions.status, 'pending'),
-          sql`${companySuggestions.confidenceScore} >= ${minConfidence}`
+    try {
+      return await db
+        .select()
+        .from(companySuggestions)
+        .where(
+          and(
+            eq(companySuggestions.status, 'pending'),
+            sql`${companySuggestions.confidenceScore} >= ${minConfidence}`
+          )
         )
-      )
-      .orderBy(companySuggestions.confidenceScore);
+        .orderBy(companySuggestions.confidenceScore);
+    } catch (error) {
+      console.error('Error in listAutoConfirmableSuggestions:', error);
+      throw error;
+    }
   }
 
   // Followup Schedules
   async getFollowupSchedule(id: number): Promise<FollowupSchedule | undefined> {
-    const [schedule] = await db
-      .select()
-      .from(followupSchedules)
-      .where(eq(followupSchedules.id, id));
-    return schedule;
+    try {
+      return await db
+        .query.followupSchedules.findFirst({where: eq(followupSchedules.id, id)});
+    } catch (error) {
+      console.error('Error in getFollowupSchedule:', error);
+      throw error;
+    }
   }
 
   async listFollowupSchedules(chatId: number): Promise<FollowupSchedule[]> {
-    return await db
-      .select()
-      .from(followupSchedules)
-      .where(eq(followupSchedules.chatId, chatId))
-      .orderBy(followupSchedules.scheduledFor);
+    try {
+      return await db
+        .select()
+        .from(followupSchedules)
+        .where(eq(followupSchedules.chatId, chatId))
+        .orderBy(followupSchedules.scheduledFor);
+    } catch (error) {
+      console.error('Error in listFollowupSchedules:', error);
+      throw error;
+    }
   }
 
   async createFollowupSchedule(
     schedule: InsertFollowupSchedule & { createdById: number }
   ): Promise<FollowupSchedule> {
-    const [newSchedule] = await db
-      .insert(followupSchedules)
-      .values(schedule)
-      .returning();
-    return newSchedule;
+    try {
+      const [newSchedule] = await db
+        .insert(followupSchedules)
+        .values(schedule)
+        .returning();
+      return newSchedule;
+    } catch (error) {
+      console.error('Error in createFollowupSchedule:', error);
+      throw error;
+    }
   }
 
   async updateFollowupStatus(id: number, status: string): Promise<FollowupSchedule> {
-    const [updatedSchedule] = await db
-      .update(followupSchedules)
-      .set({ status })
-      .where(eq(followupSchedules.id, id))
-      .returning();
-    return updatedSchedule;
+    try {
+      const [updatedSchedule] = await db
+        .update(followupSchedules)
+        .set({ status })
+        .where(eq(followupSchedules.id, id))
+        .returning();
+      return updatedSchedule;
+    } catch (error) {
+      console.error('Error in updateFollowupStatus:', error);
+      throw error;
+    }
   }
 
   async listPendingFollowups(): Promise<FollowupSchedule[]> {
-    return await db
-      .select()
-      .from(followupSchedules)
-      .where(
-        and(
-          eq(followupSchedules.status, 'pending'),
-          sql`${followupSchedules.scheduledFor} <= now()`
+    try {
+      return await db
+        .select()
+        .from(followupSchedules)
+        .where(
+          and(
+            eq(followupSchedules.status, 'pending'),
+            sql`${followupSchedules.scheduledFor} <= now()`
+          )
         )
-      )
-      .orderBy(followupSchedules.scheduledFor);
+        .orderBy(followupSchedules.scheduledFor);
+    } catch (error) {
+      console.error('Error in listPendingFollowups:', error);
+      throw error;
+    }
   }
 
+  // Extended User Methods
   async getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, phoneNumber)); // Using username as phone number
-    return user;
+    try {
+      return await db.query.users.findFirst({
+        where: eq(users.username, phoneNumber)
+      });
+    } catch (error) {
+      console.error('Error in getUserByPhoneNumber:', error);
+      throw error;
+    }
   }
 
   async getUserById(id: number): Promise<User | undefined> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, id));
-    return user;
+    try {
+      return await db.query.users.findFirst({
+        where: eq(users.id, id)
+      });
+    } catch (error) {
+      console.error('Error in getUserById:', error);
+      throw error;
+    }
   }
 
   async updateUser(user: User): Promise<User> {
-    const [updatedUser] = await db
-      .update(users)
-      .set(user)
-      .where(eq(users.id, user.id))
-      .returning();
-    return updatedUser;
+    try {
+      const [updatedUser] = await db.update(users)
+        .set(user)
+        .where(eq(users.id, user.id))
+        .returning();
+      return updatedUser;
+    } catch (error) {
+      console.error('Error in updateUser:', error);
+      throw error;
+    }
   }
 
   async getRecentMessages(contactId: number, limit: number): Promise<Message[]> {
-    return await db
-      .select()
-      .from(messages)
-      .where(eq(messages.contactId, contactId))
-      .orderBy(sql`${messages.createdAt} DESC`)
-      .limit(limit);
+    try {
+      return await db
+        .select()
+        .from(messages)
+        .where(eq(messages.contactId, contactId))
+        .orderBy(sql`${messages.createdAt} DESC`)
+        .limit(limit);
+    } catch (error) {
+      console.error('Error in getRecentMessages:', error);
+      throw error;
+    }
   }
 
   async createMessageSuggestions(messageId: number, suggestions: string[]): Promise<MessageSuggestion[]> {
-    const suggestionValues = suggestions.map(suggestion => ({
-      messageId,
-      suggestion,
-    }));
+    try {
+      const suggestionValues = suggestions.map(suggestion => ({
+        messageId,
+        suggestion,
+      }));
 
-    return await db
-      .insert(messageSuggestions)
-      .values(suggestionValues)
-      .returning();
+      return await db
+        .insert(messageSuggestions)
+        .values(suggestionValues)
+        .returning();
+    } catch (error) {
+      console.error('Error in createMessageSuggestions:', error);
+      throw error;
+    }
   }
 }
 

@@ -29,9 +29,12 @@ export function TestMessage() {
     try {
       setLoading(true);
       setError(null);
+      const formData = new FormData();
+      formData.append('message', message);
+
       const result = await apiRequest<TestResponse>('/api/test/telegram-message', {
         method: 'POST',
-        body: { message }
+        body: formData
       });
       setResponse(result);
     } catch (err: any) {

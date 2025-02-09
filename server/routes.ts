@@ -10,6 +10,7 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { clientManager } from "./userbot-client";
+import { generateResponseSuggestions } from "./aiSuggestions";
 
 declare module 'express-session' {
   interface SessionData {
@@ -327,106 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/telegram-auth/verify-2fa", async (req, res) => {
-    try {
-      console.log("[Route] Received 2FA verification request");
 
-      if (!req.session.requires2FA) {
-        return res.status(400).json({
-          message: "2FA verification not required"
-        });
-      }
-
-      const { password } = req.body;
-      if (!password) {
-        return res.status(400).json({
-          message: "2FA password is required"
-        });
-      }
-
-      const session = await verify2FA(password);
-      req.session.telegramSession = session;
-      req.session.requires2FA = false;
-
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("[Route] Error in 2FA verification:", error);
-      res.status(500).json({
-        message: "Failed to verify 2FA password",
-        error: error.message
-      });
-    }
-  });
-
-  // 2FA Setup
-  app.post("/api/2fa-setup", async (req, res) => {
-    try {
-      if (!req.session.userId) {
-        return res.status(401).json({ message: "User session not found." });
-      }
-
-      const user = await storage.getUserById(req.session.userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found." });
-      }
-
-      const secret = speakeasy.generateSecret({ length: 20 });
-      const updatedUser = {
-        ...user,
-        twoFactorSecret: secret.base32
-      };
-
-      await storage.updateUser(updatedUser);
-      res.json({ otpauth_url: secret.otpauth_url });
-    } catch (error: any) {
-      console.error("[Route] Error in 2FA setup:", error);
-      res.status(500).json({ message: "Failed to set up 2FA" });
-    }
-  });
-
-
-  app.get("/api/telegram-auth/status", async (req, res) => {
-    try {
-      console.log("[Route] Checking Telegram auth status:", {
-        hasSession: !!req.session,
-        hasTelegramSession: !!req.session?.telegramSession,
-        sessionID: req.sessionID
-      });
-
-      const telegramSession = req.session?.telegramSession;
-      if (!telegramSession) {
-        console.log("[Route] No Telegram session found");
-        return res.json({ connected: false });
-      }
-
-      console.log("[Route] Found Telegram session, checking connection");
-      const client = await clientManager.getClient(telegramSession);
-      const me = await client.getMe();
-
-      console.log("[Route] Connection check succeeded, user:", {
-        id: me?.id,
-        username: me?.username,
-        firstName: me?.firstName
-      });
-
-      res.json({
-        connected: true,
-        user: {
-          id: me?.id.toString(),
-          username: me?.username,
-          firstName: me?.firstName
-        }
-      });
-    } catch (error) {
-      console.error("[Route] Connection status check failed:", error);
-      // Clear invalid session
-      req.session.telegramSession = undefined;
-      await clientManager.cleanup();
-      res.json({ connected: false });
-    }
-  });
-
-  // Add this route after the existing routes
   app.post("/api/test/telegram-message", async (req, res) => {
     try {
       const { message } = req.body;
@@ -481,6 +383,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/telegram-auth/status", async (req, res) => {
+    try {
+      console.log("[Route] Checking Telegram auth status:", {
+        hasSession: !!req.session,
+        hasTelegramSession: !!req.session?.telegramSession,
+        sessionID: req.sessionID
+      });
+
+      const telegramSession = req.session?.telegramSession;
+      if (!telegramSession) {
+        console.log("[Route] No Telegram session found");
+        return res.json({ connected: false });
+      }
+
+      console.log("[Route] Found Telegram session, checking connection");
+      const client = await clientManager.getClient(telegramSession);
+      const me = await client.getMe();
+
+      console.log("[Route] Connection check succeeded, user:", {
+        id: me?.id,
+        username: me?.username,
+        firstName: me?.firstName
+      });
+
+      res.json({
+        connected: true,
+        user: {
+          id: me?.id.toString(),
+          username: me?.username,
+          firstName: me?.firstName
+        }
+      });
+    } catch (error) {
+      console.error("[Route] Connection status check failed:", error);
+      // Clear invalid session
+      req.session.telegramSession = undefined;
+      await clientManager.cleanup();
+      res.json({ connected: false });
+    }
+  });
+
+  // 2FA Setup
+  app.post("/api/2fa-setup", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "User session not found." });
+      }
+
+      const user = await storage.getUserById(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+
+      const secret = speakeasy.generateSecret({ length: 20 });
+      const updatedUser = {
+        ...user,
+        twoFactorSecret: secret.base32
+      };
+
+      await storage.updateUser(updatedUser);
+      res.json({ otpauth_url: secret.otpauth_url });
+    } catch (error: any) {
+      console.error("[Route] Error in 2FA setup:", error);
+      res.status(500).json({ message: "Failed to set up 2FA" });
+    }
+  });
+
+
   const httpServer = createServer(app);
 
   // Initialize WebSocket server with a specific path
@@ -529,13 +499,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   return httpServer;
-}
-
-// Placeholder function -  replace with actual implementation
-async function generateResponseSuggestions(message: string, context: any): Promise<any[]> {
-  // Replace this with your actual suggestion generation logic
-  return [
-    { suggestion: "This is a test suggestion 1" },
-    { suggestion: "This is a test suggestion 2" }
-  ];
 }

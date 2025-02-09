@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { apiRequest } from "@/lib/queryClient";
 
 const telegramAuthSchema = z.object({
   phoneNumber: z.string().min(1, "Phone number is required"),
@@ -40,39 +41,58 @@ export default function TelegramLogin() {
     resolver: zodResolver(telegramAuthSchema),
   });
 
-  // Add function to fetch channels
-  const fetchChannels = async () => {
+  const onSubmit = async (data: TelegramAuthForm) => {
     try {
-      console.log("Fetching Telegram chats...");
-      const response = await fetch('/api/telegram-chats');
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch chats');
+      if (!awaitingCode) {
+        // Request verification code
+        const response = await apiRequest("POST", "/api/telegram-auth/request-code", {
+          phoneNumber: data.phoneNumber,
+        });
+        if (response.ok) {
+          setAwaitingCode(true);
+          toast({ title: "Verification code sent" });
+        } else {
+          const error = await response.json();
+          throw new Error(error.message);
+        }
+      } else if (requires2FA) {
+        // Submit 2FA password
+        const response = await apiRequest("POST", "/api/telegram-auth/verify-2fa", {
+          password: data.password,
+        });
+        if (response.ok) {
+          toast({ title: "Successfully authenticated" });
+          window.location.reload();
+        } else {
+          const error = await response.json();
+          throw new Error(error.message);
+        }
+      } else {
+        // Verify code
+        const response = await apiRequest("POST", "/api/telegram-auth/verify", {
+          code: data.code,
+        });
+        const result = await response.json();
+
+        if (result.requires2FA) {
+          setRequires2FA(true);
+          toast({ title: "Please enter your 2FA password" });
+        } else if (response.ok) {
+          toast({ title: "Successfully authenticated" });
+          window.location.reload();
+        } else {
+          throw new Error(result.message);
+        }
       }
-      const data = await response.json();
-      console.log("Received chats:", {
-        count: data.length,
-        types: data.reduce((acc: Record<string, number>, chat: any) => {
-          acc[chat.type] = (acc[chat.type] || 0) + 1;
-          return acc;
-        }, {}),
-        sample: data.slice(0, 3).map((c: any) => ({
-          id: c.id,
-          title: c.title,
-          type: c.type
-        }))
-      });
     } catch (error) {
-      console.error("Error fetching chats:", error);
       toast({
-        title: "Failed to fetch chats",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: "Authentication failed",
+        description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
       });
     }
   };
 
-  // Modify the useEffect to fetch channels when connected
   useEffect(() => {
     // Check initial status
     fetch('/api/telegram-auth/status')
@@ -82,7 +102,6 @@ export default function TelegramLogin() {
         if (data.connected) {
           setAwaitingCode(false);
           setRequires2FA(false);
-          fetchChannels(); // Fetch channels when connected
         }
       });
 
@@ -97,13 +116,8 @@ export default function TelegramLogin() {
         if (data.connected) {
           setAwaitingCode(false);
           setRequires2FA(false);
-          fetchChannels(); // Fetch channels when connection status updates
         }
       }
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket connection closed');
     };
 
     return () => {

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -17,7 +17,7 @@ export const contacts = pgTable("contacts", {
 });
 
 export const companies = pgTable("companies", {
-  id: serial("id").primaryKey(), 
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   createdById: integer("created_by_id").notNull(),
 });
@@ -56,6 +56,29 @@ export const channelInvitations = pgTable("channel_invitations", {
   expiresAt: timestamp("expires_at"),
   maxUses: integer("max_uses"),
   currentUses: integer("current_uses").default(0),
+});
+
+export const telegramChats = pgTable("telegram_chats", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull().unique(),
+  title: text("title").notNull(),
+  type: text("type").notNull(), // 'private', 'group', 'supergroup', 'channel'
+  status: text("status").notNull().default("pending"), // 'pending', 'synced', 'ignored'
+  lastMessageAt: timestamp("last_message_at"),
+  unreadCount: integer("unread_count").default(0),
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const companySuggestions = pgTable("company_suggestions", {
+  id: serial("id").primaryKey(),
+  chatId: integer("chat_id").notNull(),
+  companyName: text("company_name").notNull(),
+  website: text("website"),
+  confidenceScore: integer("confidence_score").notNull(),
+  metadata: jsonb("metadata"), // Store enriched data from various sources
+  status: text("status").notNull().default("pending"), // 'pending', 'confirmed', 'rejected'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -102,6 +125,24 @@ export const insertChannelInvitationSchema = createInsertSchema(channelInvitatio
     maxUses: z.number().min(1).optional(),
   });
 
+export const insertTelegramChatSchema = createInsertSchema(telegramChats).pick({
+  telegramId: true,
+  title: true,
+  type: true,
+  status: true,
+  lastMessageAt: true,
+  unreadCount: true,
+});
+
+export const insertCompanySuggestionSchema = createInsertSchema(companySuggestions).pick({
+  chatId: true,
+  companyName: true,
+  website: true,
+  confidenceScore: true,
+  metadata: true,
+  status: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -109,6 +150,8 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
 export type InsertTelegramChannel = z.infer<typeof insertTelegramChannelSchema>;
 export type InsertChannelInvitation = z.infer<typeof insertChannelInvitationSchema>;
+export type InsertTelegramChat = z.infer<typeof insertTelegramChatSchema>;
+export type InsertCompanySuggestion = z.infer<typeof insertCompanySuggestionSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
@@ -117,3 +160,5 @@ export type Message = typeof messages.$inferSelect;
 export type Announcement = typeof announcements.$inferSelect;
 export type TelegramChannel = typeof telegramChannels.$inferSelect;
 export type ChannelInvitation = typeof channelInvitations.$inferSelect;
+export type TelegramChat = typeof telegramChats.$inferSelect;
+export type CompanySuggestion = typeof companySuggestions.$inferSelect;

@@ -4,7 +4,9 @@ import { InsertUser, User, Contact, Company, Message, Announcement,
          users, contacts, companies, messages, announcements,
          TelegramChannel, telegramChannels, InsertContact, InsertCompany,
          InsertMessage, InsertAnnouncement, InsertTelegramChannel,
-         channelInvitations, ChannelInvitation, InsertChannelInvitation } from "@shared/schema";
+         channelInvitations, ChannelInvitation, InsertChannelInvitation,
+         TelegramChat, InsertTelegramChat, CompanySuggestion, InsertCompanySuggestion,
+         telegramChats, companySuggestions } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
@@ -49,6 +51,20 @@ export interface IStorage {
   createChannelInvitation(invitation: InsertChannelInvitation & { createdById: number }): Promise<ChannelInvitation>;
   updateInvitationStatus(id: number, status: string): Promise<ChannelInvitation>;
   incrementInvitationUses(id: number): Promise<ChannelInvitation>;
+
+  // Telegram Chats
+  getTelegramChat(id: number): Promise<TelegramChat | undefined>;
+  getTelegramChatByTelegramId(telegramId: string): Promise<TelegramChat | undefined>;
+  listTelegramChats(): Promise<TelegramChat[]>;
+  createTelegramChat(chat: InsertTelegramChat & { createdById: number }): Promise<TelegramChat>;
+  updateTelegramChatStatus(id: number, status: string): Promise<TelegramChat>;
+  updateTelegramChatUnreadCount(id: number, unreadCount: number): Promise<TelegramChat>;
+
+  // Company Suggestions
+  getCompanySuggestion(id: number): Promise<CompanySuggestion | undefined>;
+  listCompanySuggestions(chatId: number): Promise<CompanySuggestion[]>;
+  createCompanySuggestion(suggestion: InsertCompanySuggestion): Promise<CompanySuggestion>;
+  updateCompanySuggestionStatus(id: number, status: string): Promise<CompanySuggestion>;
 
   sessionStore: session.Store;
 }
@@ -207,6 +223,72 @@ export class DatabaseStorage implements IStorage {
       .where(eq(channelInvitations.id, id))
       .returning();
     return updatedInvitation;
+  }
+
+  // Telegram Chats
+  async getTelegramChat(id: number): Promise<TelegramChat | undefined> {
+    const [chat] = await db.select().from(telegramChats).where(eq(telegramChats.id, id));
+    return chat;
+  }
+
+  async getTelegramChatByTelegramId(telegramId: string): Promise<TelegramChat | undefined> {
+    const [chat] = await db.select().from(telegramChats).where(eq(telegramChats.telegramId, telegramId));
+    return chat;
+  }
+
+  async listTelegramChats(): Promise<TelegramChat[]> {
+    return await db.select().from(telegramChats).orderBy(telegramChats.lastMessageAt);
+  }
+
+  async createTelegramChat(chat: InsertTelegramChat & { createdById: number }): Promise<TelegramChat> {
+    const [newChat] = await db.insert(telegramChats).values(chat).returning();
+    return newChat;
+  }
+
+  async updateTelegramChatStatus(id: number, status: string): Promise<TelegramChat> {
+    const [updatedChat] = await db
+      .update(telegramChats)
+      .set({ status })
+      .where(eq(telegramChats.id, id))
+      .returning();
+    return updatedChat;
+  }
+
+  async updateTelegramChatUnreadCount(id: number, unreadCount: number): Promise<TelegramChat> {
+    const [updatedChat] = await db
+      .update(telegramChats)
+      .set({ unreadCount })
+      .where(eq(telegramChats.id, id))
+      .returning();
+    return updatedChat;
+  }
+
+  // Company Suggestions
+  async getCompanySuggestion(id: number): Promise<CompanySuggestion | undefined> {
+    const [suggestion] = await db.select().from(companySuggestions).where(eq(companySuggestions.id, id));
+    return suggestion;
+  }
+
+  async listCompanySuggestions(chatId: number): Promise<CompanySuggestion[]> {
+    return await db
+      .select()
+      .from(companySuggestions)
+      .where(eq(companySuggestions.chatId, chatId))
+      .orderBy(companySuggestions.confidenceScore);
+  }
+
+  async createCompanySuggestion(suggestion: InsertCompanySuggestion): Promise<CompanySuggestion> {
+    const [newSuggestion] = await db.insert(companySuggestions).values(suggestion).returning();
+    return newSuggestion;
+  }
+
+  async updateCompanySuggestionStatus(id: number, status: string): Promise<CompanySuggestion> {
+    const [updatedSuggestion] = await db
+      .update(companySuggestions)
+      .set({ status })
+      .where(eq(companySuggestions.id, id))
+      .returning();
+    return updatedSuggestion;
   }
 }
 

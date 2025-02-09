@@ -1,0 +1,93 @@
+# Telegram CRM User Experience Guide
+
+## **Overview**
+This document outlines the user journey for onboarding and managing Telegram chats in the CRM system, including AI-driven company suggestions and follow-up workflows.
+
+---
+
+## **1️⃣ User Onboarding**
+### **Step 1: Confirm Telegram Phone Number**
+- User lands on the login screen.
+- Enters their Telegram phone number.
+- Receives a confirmation code via Telegram.
+- If **2FA is enabled**, the user must enter their password (currently not fully functional).
+- Upon successful verification, a session key is generated for authentication.
+
+💡 **Tech Details:**
+- Use **Telethon** or **Telegram API login flow**.
+- Optionally integrate with **OAuth for future authentication**.
+- Session key will be used for persistent login.
+
+### **Step 2: Create Password (if applicable)**
+- If the user has 2FA, they must enter their password.
+- If returning user, logs in with phone + session key.
+- Upon successful authentication, redirected to the Chats page.
+
+💡 **Tech Details:**
+- Store encrypted passwords (bcrypt) if applicable.
+- Offer **"Forgot Password?"** option in case 2FA is re-enabled later.
+
+---
+
+## **2️⃣ Chats Management**
+### **Step 3: Chats Dashboard**
+- User lands on the **Chats** page.
+- Displays a list of Telegram conversations.
+- **User selects which chats to sync** (rather than syncing everything automatically).
+- Features available:
+  - **Full search and sorting** (by date, company, priority, participants, unread messages, etc.).
+  - **Unread message count & last activity timestamp.**
+  - Each chat has two options:
+    1. ✅ **Add to CRM** → Moves chat into CRM workflow.
+    2. ❌ **Ignore Chat** → Moves chat to an **Ignored Chats List** (can be restored if needed).
+
+💡 **Tech Details:**
+- Fetch **user-selected Telegram conversations**.
+- Store rejected chats in a **“Ignored Chats” list**.
+
+---
+
+## **3️⃣ AI-Powered CRM Integration**
+### **Step 4: AI Company & Contact Confirmation**
+- If a chat is added to CRM, AI suggests a company **with a confidence score**.
+- AI gathers data from:
+  - 🔗 **LinkedIn** (Company profile & employees).
+  - 🐦 **Twitter** (Recent tweets & sentiment analysis).
+  - 🌍 **Company Website** (Extract metadata).
+  - 📜 **Docs** (PDFs, GitHub, shared links in chat).
+  - 🎥 **YouTube, social media, industry news.**
+  - 👤 **Social accounts of key leaders (Twitter, LinkedIn, GitHub, etc.).**
+- **User manually confirms:**
+  1. The correct **Company (Name, URL, Socials, etc.)** before finalizing.
+  2. The correct **Contacts (Usernames, LinkedIn, Twitter, etc.)** before moving them into CRM.
+
+💡 **Tech Details:**
+- AI models scan **chat names, messages, & shared links**.
+- API calls to **LinkedIn, Twitter, Google, YouTube, and Crunchbase** for enrichment.
+- Store **all user confirmations for AI learning and future recommendations**.
+
+---
+
+## **4️⃣ CRM & Follow-Up Workflow**
+### **Step 5: Final CRM Integration**
+- Once a company is confirmed:
+  - Chat is **officially added to CRM**.
+  - Contact list is **extracted & linked** to the company.
+  - AI suggests **next steps (follow-ups, meeting reminders).**
+  - User can **view company profile in CRM.**
+
+💡 **Tech Details:**
+- Store **structured data in PostgreSQL**.
+- Enable **AI-generated follow-up reminders**.
+- System evolves by learning user preferences over time.
+
+---
+
+## **Future Enhancements**
+- **More automation:** AI proactively suggests engagement strategies.
+- **Multi-user support:** Expand CRM collaboration features.
+- **Real-time notifications:** AI insights delivered directly to the user.
+- **Deeper business intelligence:** AI monitors **crypto-specific trends** and **industry leader insights** to enhance business development strategies.
+
+This guide ensures a seamless, AI-enhanced CRM experience. 🚀
+

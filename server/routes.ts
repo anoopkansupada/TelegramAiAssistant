@@ -278,6 +278,68 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Telegram Chats
+  app.get("/api/telegram-chats", async (req, res) => {
+    try {
+      const chats = await storage.listTelegramChats();
+      res.json(chats);
+    } catch (error) {
+      console.error("Failed to list chats:", error);
+      res.status(500).json({ message: "Failed to list chats" });
+    }
+  });
+
+  app.post("/api/telegram-chats/:chatId/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!['synced', 'ignored'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const chat = await storage.getTelegramChat(parseInt(req.params.chatId));
+      if (!chat) {
+        return res.status(404).json({ message: "Chat not found" });
+      }
+
+      const updatedChat = await storage.updateTelegramChatStatus(chat.id, status);
+      res.json(updatedChat);
+    } catch (error) {
+      console.error("Failed to update chat status:", error);
+      res.status(500).json({ message: "Failed to update chat status" });
+    }
+  });
+
+  // Company Suggestions
+  app.get("/api/telegram-chats/:chatId/suggestions", async (req, res) => {
+    try {
+      const suggestions = await storage.listCompanySuggestions(parseInt(req.params.chatId));
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Failed to list suggestions:", error);
+      res.status(500).json({ message: "Failed to list suggestions" });
+    }
+  });
+
+  app.post("/api/telegram-chats/:chatId/suggestions/:suggestionId/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!['confirmed', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const suggestion = await storage.getCompanySuggestion(parseInt(req.params.suggestionId));
+      if (!suggestion) {
+        return res.status(404).json({ message: "Suggestion not found" });
+      }
+
+      const updatedSuggestion = await storage.updateCompanySuggestionStatus(suggestion.id, status);
+      res.json(updatedSuggestion);
+    } catch (error) {
+      console.error("Failed to update suggestion status:", error);
+      res.status(500).json({ message: "Failed to update suggestion status" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

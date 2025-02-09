@@ -156,9 +156,9 @@ export default function CompaniesPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {company.city && company.country && (
+                    {company.location && (
                       <span className="text-sm text-muted-foreground">
-                        {`${company.city}, ${company.country}`}
+                        {company.location}
                       </span>
                     )}
                   </TableCell>

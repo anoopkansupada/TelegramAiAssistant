@@ -20,8 +20,21 @@ const clientInstance: ClientInstance = {
 // Connection check interval (30 seconds for more responsive status updates)
 const CONNECTION_CHECK_INTERVAL = 30 * 1000;
 
-// Broadcast status function from global scope
-const broadcastStatus = (global as any).broadcastStatus;
+interface StatusUpdate {
+  type: 'status';
+  connected: boolean;
+  user?: {
+    id: string;
+    username: string;
+    firstName?: string;
+  };
+  lastChecked: string;
+}
+
+// Type-safe broadcast status function
+declare global {
+  var broadcastStatus: (status: StatusUpdate) => void;
+}
 
 // Check connection and broadcast status
 async function checkAndBroadcastStatus() {
@@ -35,41 +48,49 @@ async function checkAndBroadcastStatus() {
           username: me?.username
         });
 
+        if (global.broadcastStatus) {
+          global.broadcastStatus({
+            type: 'status',
+            connected: true,
+            user: {
+              id: me?.id?.toString(),
+              username: me?.username,
+              firstName: me?.firstName
+            },
+            lastChecked: new Date().toISOString()
+          });
+        }
         clientInstance.connected = true;
-        broadcastStatus({
-          type: 'status',
-          connected: true,
-          user: {
-            id: me?.id?.toString(),
-            username: me?.username,
-            firstName: me?.firstName
-          },
-          lastChecked: new Date().toISOString()
-        });
       } catch (error) {
         console.log("[UserBot] Connection check failed:", error);
         clientInstance.connected = false;
-        broadcastStatus({
+        if (global.broadcastStatus) {
+          global.broadcastStatus({
+            type: 'status',
+            connected: false,
+            lastChecked: new Date().toISOString()
+          });
+        }
+      }
+    } else if (clientInstance.client) {
+      console.log("[UserBot] Client exists but not connected");
+      if (global.broadcastStatus) {
+        global.broadcastStatus({
           type: 'status',
           connected: false,
           lastChecked: new Date().toISOString()
         });
       }
-    } else if (clientInstance.client) {
-      console.log("[UserBot] Client exists but not connected");
-      broadcastStatus({
+    }
+  } catch (error) {
+    console.error("[UserBot] Error in status check:", error);
+    if (global.broadcastStatus) {
+      global.broadcastStatus({
         type: 'status',
         connected: false,
         lastChecked: new Date().toISOString()
       });
     }
-  } catch (error) {
-    console.error("[UserBot] Error in status check:", error);
-    broadcastStatus({
-      type: 'status',
-      connected: false,
-      lastChecked: new Date().toISOString()
-    });
   }
 }
 

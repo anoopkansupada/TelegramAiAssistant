@@ -3,6 +3,13 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { sendAnnouncement, generateChannelInviteLink, revokeChannelInviteLink } from "./telegram";
+import { requestVerificationCode, verifyCode } from "./userbot-auth";
+
+declare module 'express-session' {
+  interface SessionData {
+    telegramSession?: string;
+  }
+}
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -75,7 +82,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       const inviteLink = await generateChannelInviteLink(channel.telegramId, {
-        expireDate: req.body.expiresAt ? new Date(req.body.expiresAt).getTime() : undefined,
+        expireDate: req.body.expiresAt ? Math.floor(new Date(req.body.expiresAt).getTime() / 1000) : undefined,
         memberLimit: req.body.maxUses,
       });
 
@@ -84,7 +91,7 @@ export function registerRoutes(app: Express): Server {
         inviteLink,
         status: "active",
         maxUses: req.body.maxUses,
-        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : undefined,
+        expiresAt: req.body.expiresAt,
         createdById: req.user!.id,
       });
 
@@ -124,6 +131,40 @@ export function registerRoutes(app: Express): Server {
     await sendAnnouncement(req.body.content, req.body.targetChannelIds);
 
     res.status(201).json(announcement);
+  });
+
+  // Userbot Authentication Routes
+  app.post("/api/telegram-auth/request-code", async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      await requestVerificationCode(phoneNumber);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error requesting verification code:", error);
+      res.status(500).json({
+        message: "Failed to send verification code",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  app.post("/api/telegram-auth/verify", async (req, res) => {
+    try {
+      const { phoneNumber, code } = req.body;
+      const session = await verifyCode(phoneNumber, code);
+
+      // Store the session or associate it with the user
+      // You might want to store this in your database or session
+      req.session.telegramSession = session;
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error verifying code:", error);
+      res.status(500).json({
+        message: "Failed to verify code",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
   });
 
   const httpServer = createServer(app);

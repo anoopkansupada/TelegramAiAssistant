@@ -12,7 +12,7 @@ export const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
 // Store messages with sentiment analysis
 bot.on("message", async (ctx) => {
-  if (!ctx.message.text) return;
+  if (!ctx.message || !('text' in ctx.message)) return;
 
   const telegramId = ctx.message.from.id.toString();
   let contact = await storage.getContactByTelegramId(telegramId);
@@ -59,6 +59,33 @@ bot.on("my_chat_member", async (ctx) => {
   }
 });
 
+// Generate invite links for channels
+export async function generateChannelInviteLink(chatId: string, options?: {
+  expireDate?: number;
+  memberLimit?: number;
+}) {
+  try {
+    const inviteLink = await bot.telegram.createChatInviteLink(chatId, {
+      expire_date: options?.expireDate,
+      member_limit: options?.memberLimit,
+    });
+    return inviteLink.invite_link;
+  } catch (error) {
+    console.error("Failed to generate invite link:", error);
+    throw new Error("Failed to generate invite link");
+  }
+}
+
+// Revoke an invite link
+export async function revokeChannelInviteLink(chatId: string, inviteLink: string) {
+  try {
+    await bot.telegram.revokeChatInviteLink(chatId, inviteLink);
+  } catch (error) {
+    console.error("Failed to revoke invite link:", error);
+    throw new Error("Failed to revoke invite link");
+  }
+}
+
 // Send announcements to specific channels/groups or all
 export async function sendAnnouncement(content: string, targetChannelIds?: string[]) {
   if (targetChannelIds && targetChannelIds.length > 0) {
@@ -80,36 +107,6 @@ export async function sendAnnouncement(content: string, targetChannelIds?: strin
         console.error(`Failed to send announcement to ${channel.name}:`, error);
       }
     }
-  }
-}
-
-// Generate invite link for a channel
-export async function generateChannelInviteLink(
-  channelId: string,
-  options?: {
-    expireDate?: number;
-    memberLimit?: number;
-  }
-) {
-  try {
-    const inviteLink = await bot.telegram.createChatInviteLink(channelId, {
-      expire_date: options?.expireDate,
-      member_limit: options?.memberLimit,
-    });
-    return inviteLink.invite_link;
-  } catch (error) {
-    console.error(`Failed to generate invite link for channel ${channelId}:`, error);
-    throw error;
-  }
-}
-
-// Revoke an invite link
-export async function revokeChannelInviteLink(channelId: string, inviteLink: string) {
-  try {
-    await bot.telegram.revokeChatInviteLink(channelId, inviteLink);
-  } catch (error) {
-    console.error(`Failed to revoke invite link for channel ${channelId}:`, error);
-    throw error;
   }
 }
 

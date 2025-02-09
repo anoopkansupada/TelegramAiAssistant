@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Filter, Search, Plus, ArrowUp, ArrowDown } from "lucide-react";
+import { Filter, Search, Plus, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { Company } from "@shared/schema";
 
 export default function CompaniesPage() {
@@ -23,7 +23,7 @@ export default function CompaniesPage() {
     direction: 'asc' | 'desc';
   } | null>(null);
 
-  const { data: companies = [] } = useQuery<Company[]>({
+  const { data: companies = [], isLoading, error } = useQuery<Company[]>({
     queryKey: ['/api/companies'],
   });
 
@@ -46,6 +46,31 @@ export default function CompaniesPage() {
       return null;
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <p className="text-destructive mb-2">Failed to load companies</p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -119,63 +144,71 @@ export default function CompaniesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {companies.map((company) => (
-                <TableRow key={company.id}>
-                  <TableCell>
-                    <Checkbox 
-                      checked={selectedRows.has(company.id)}
-                      onCheckedChange={(checked) => {
-                        const newSelected = new Set(selectedRows);
-                        if (checked) {
-                          newSelected.add(company.id);
-                        } else {
-                          newSelected.delete(company.id);
-                        }
-                        setSelectedRows(newSelected);
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-8 w-8" />
-                      <div>
-                        <div className="font-medium">{company.name}</div>
-                        {company.email && (
-                          <div className="text-sm text-muted-foreground">
-                            {company.email}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {company.industry && (
-                      <Badge variant="secondary">
-                        {company.industry}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {company.location && (
-                      <span className="text-sm text-muted-foreground">
-                        {company.location}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {company.size && (
-                      <span className="text-sm text-muted-foreground">
-                        {company.size}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground">
-                      {new Date(company.createdAt).toLocaleDateString()}
-                    </span>
+              {companies.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center">
+                    No companies found
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                companies.map((company) => (
+                  <TableRow key={company.id}>
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedRows.has(company.id)}
+                        onCheckedChange={(checked) => {
+                          const newSelected = new Set(selectedRows);
+                          if (checked) {
+                            newSelected.add(company.id);
+                          } else {
+                            newSelected.delete(company.id);
+                          }
+                          setSelectedRows(newSelected);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8" />
+                        <div>
+                          <div className="font-medium">{company.name}</div>
+                          {company.email && (
+                            <div className="text-sm text-muted-foreground">
+                              {company.email}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {company.industry && (
+                        <Badge variant="secondary">
+                          {company.industry}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {company.location && (
+                        <span className="text-sm text-muted-foreground">
+                          {company.location}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {company.size && (
+                        <span className="text-sm text-muted-foreground">
+                          {company.size}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(company.createdAt).toLocaleDateString()}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

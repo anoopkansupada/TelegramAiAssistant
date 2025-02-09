@@ -1,70 +1,41 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Contact, Company, Message, insertContactSchema } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { Contact } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import {
-  Card, CardContent, CardHeader,
-  CardTitle, CardDescription
+  Card,
+  CardContent,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Form, FormControl, FormField,
-  FormItem, FormLabel, FormMessage
-} from "@/components/ui/form";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Users, Plus, ChevronRight
-} from "lucide-react";
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue
-} from "@/components/ui/select";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Filter, Search, Plus, ArrowUp, ArrowDown } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 
 export default function PeoplePage() {
-  const { toast } = useToast();
-  const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
 
-  const { data: contacts } = useQuery<Contact[]>({
-    queryKey: ["/api/contacts"],
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
   });
 
-  const { data: companies } = useQuery<Company[]>({
-    queryKey: ["/api/companies"],
-  });
-
-  // Contact Form
-  const contactForm = useForm({
-    resolver: zodResolver(insertContactSchema),
-  });
-
-  const createContactMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/contacts", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      toast({ title: "Contact created successfully" });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to create contact",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const handleSort = (key: string) => {
+    setSortConfig({
+      key,
+      direction: sortConfig?.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc',
+    });
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -75,82 +46,95 @@ export default function PeoplePage() {
             Manage your contacts and their information
           </p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Contact
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Contact</DialogTitle>
-            </DialogHeader>
-            {/* Contact Form - Same as before */}
-          </DialogContent>
-        </Dialog>
+        <Button>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Contact
+        </Button>
       </div>
 
-      {/* Contacts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {contacts && contacts.length > 0 ? (
-          contacts.map((contact) => (
-            <Card key={contact.id} className="hover:border-primary transition-colors">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-primary" />
-                    <CardTitle className="text-lg">
-                      {`${contact.firstName} ${contact.lastName || ''}`}
-                    </CardTitle>
-                  </div>
-                  <Badge variant="secondary">{contact.status}</Badge>
-                </div>
-                {contact.jobTitle && (
-                  <CardDescription>
-                    {[contact.jobTitle, contact.department].filter(Boolean).join(' • ')}
-                  </CardDescription>
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {contact.email && (
-                    <div className="text-sm">
-                      ✉️ {contact.email}
-                    </div>
-                  )}
-                  {contact.phone && (
-                    <div className="text-sm">
-                      📱 {contact.phone}
-                    </div>
-                  )}
-                  {contact.telegramUsername && (
-                    <div className="text-sm">
-                      💬 @{contact.telegramUsername}
-                    </div>
-                  )}
-                  {contact.tags && contact.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-3">
-                      {contact.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <Users className="h-12 w-12 mx-auto text-muted-foreground/50" />
-            <h3 className="mt-4 text-lg font-semibold">No contacts yet</h3>
-            <p className="text-sm text-muted-foreground mt-2">
-              Get started by adding your first contact
-            </p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search contacts..." 
+                className="pl-8 w-[300px]"
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex items-center gap-2"
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+            </Button>
           </div>
-        )}
+        </div>
+
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Tags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {contacts.map((contact) => (
+                <TableRow key={contact.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8" />
+                      <div>
+                        <div className="font-medium">
+                          {`${contact.firstName} ${contact.lastName || ''}`}
+                        </div>
+                        {contact.jobTitle && (
+                          <div className="text-sm text-muted-foreground">
+                            {contact.jobTitle}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {contact.companyId && (
+                      <Badge variant="secondary">
+                        Company Name
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>{contact.email || '-'}</TableCell>
+                  <TableCell>{contact.phone || '-'}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={contact.status === 'active' ? 'default' : 'secondary'}
+                    >
+                      {contact.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {contact.tags && contact.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {contact.tags.map((tag) => (
+                          <Badge key={tag} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

@@ -9,8 +9,8 @@ import TelegramLogin from "./pages/telegram-login";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
-import CRM from "@/pages/crm";
-import Channels from "@/pages/channels";
+import Companies from "@/pages/companies";
+import People from "@/pages/people";
 import { TestSuggestions } from "@/components/test-suggestions";
 import { TestMessage } from "@/components/test-message";
 
@@ -22,8 +22,8 @@ function Router() {
         <Layout>
           <Switch>
             <ProtectedRoute path="/" component={Dashboard} />
-            <ProtectedRoute path="/crm" component={CRM} />
-            <ProtectedRoute path="/channels" component={Channels} />
+            <ProtectedRoute path="/people" component={People} />
+            <ProtectedRoute path="/companies" component={Companies} />
             <ProtectedRoute path="/telegram-login" component={TelegramLogin} />
             <ProtectedRoute path="/test-suggestions" component={TestSuggestions} />
             <ProtectedRoute path="/test-message" component={TestMessage} />

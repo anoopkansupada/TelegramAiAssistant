@@ -5,7 +5,7 @@ import { storage } from "./storage";
 let client: TelegramClient | null = null;
 
 export async function initializeUserbot() {
-  const apiId = process.env.TELEGRAM_API_ID;
+  const apiId = parseInt(process.env.TELEGRAM_API_ID || "", 10);
   const apiHash = process.env.TELEGRAM_API_HASH;
 
   if (!apiId || !apiHash) {
@@ -13,54 +13,51 @@ export async function initializeUserbot() {
   }
 
   const stringSession = new StringSession("");
-  client = new TelegramClient(stringSession, parseInt(apiId), apiHash, {
+  client = new TelegramClient(stringSession, apiId, apiHash, {
     connectionRetries: 5,
   });
 
-  await client.start({
-    phoneNumber: async () => {
-      throw new Error("Phone number should be provided through the login flow");
-    },
-    password: async () => {
-      throw new Error("2FA password should be provided through the login flow");
-    },
-    phoneCode: async () => {
-      throw new Error("Phone code should be provided through the login flow");
-    },
-    onError: (err) => console.error(err),
-  });
+  return client;
 }
 
 export async function requestVerificationCode(phoneNumber: string) {
-  if (!client) {
-    await initializeUserbot();
-  }
-
   try {
-    await client!.connect();
-    await client!.sendCode({
-      apiId: process.env.TELEGRAM_API_ID!,
+    if (!client) {
+      client = await initializeUserbot();
+    }
+
+    await client.connect();
+
+    // Format phone number to ensure it starts with '+'
+    const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+
+    const result = await client.sendCode({
+      apiId: parseInt(process.env.TELEGRAM_API_ID!, 10),
       apiHash: process.env.TELEGRAM_API_HASH!,
-      phoneNumber,
+      phoneNumber: formattedPhone,
     });
-    return true;
+
+    return result.phoneCodeHash;
   } catch (error) {
     console.error("Error sending verification code:", error);
     throw error;
   }
 }
 
-export async function verifyCode(phoneNumber: string, code: string) {
+export async function verifyCode(phoneNumber: string, code: string, phoneCodeHash: string) {
   if (!client) {
     throw new Error("Client not initialized");
   }
 
   try {
     await client.connect();
+
+    const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+
     const result = await client.invoke({
       _: "auth.signIn",
-      phoneNumber,
-      phoneCodeHash: await client.getPhoneCodeHash(phoneNumber),
+      phoneNumber: formattedPhone,
+      phoneCodeHash,
       phoneCode: code,
     });
 
@@ -68,8 +65,8 @@ export async function verifyCode(phoneNumber: string, code: string) {
       throw new Error("User is not registered on Telegram");
     }
 
-    const session = client.session.save() as string;
-    return session;
+    const session = await client.session.save();
+    return session as string;
   } catch (error) {
     console.error("Error verifying code:", error);
     throw error;

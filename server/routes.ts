@@ -8,6 +8,13 @@ import { requestVerificationCode, verifyCode } from "./userbot-auth";
 declare module 'express-session' {
   interface SessionData {
     telegramSession?: string;
+    phoneCodeHash?: string;
+    phoneNumber?: string;
+    // Add new session variables here as needed.  For example:
+    userId?: number;
+    isAdmin?: boolean;
+    targetChannelIds?: number[];
+
   }
 }
 
@@ -137,7 +144,16 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/telegram-auth/request-code", async (req, res) => {
     try {
       const { phoneNumber } = req.body;
-      await requestVerificationCode(phoneNumber);
+      if (!phoneNumber) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+
+      const phoneCodeHash = await requestVerificationCode(phoneNumber);
+
+      // Store the phone code hash in session for verification
+      req.session.phoneCodeHash = phoneCodeHash;
+      req.session.phoneNumber = phoneNumber;
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error requesting verification code:", error);
@@ -150,11 +166,19 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/telegram-auth/verify", async (req, res) => {
     try {
-      const { phoneNumber, code } = req.body;
-      const session = await verifyCode(phoneNumber, code);
+      const { code } = req.body;
+      const phoneNumber = req.session.phoneNumber;
+      const phoneCodeHash = req.session.phoneCodeHash;
 
-      // Store the session or associate it with the user
-      // You might want to store this in your database or session
+      if (!phoneNumber || !phoneCodeHash) {
+        return res.status(400).json({
+          message: "Please request a verification code first"
+        });
+      }
+
+      const session = await verifyCode(phoneNumber, code, phoneCodeHash);
+
+      // Store the session
       req.session.telegramSession = session;
 
       res.json({ success: true });

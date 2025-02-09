@@ -38,8 +38,13 @@ interface StatusUpdate {
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);  
 
-  // Require authentication for all /api routes
+  // Require authentication for all /api routes except Telegram auth
   app.use("/api", (req, res, next) => {
+    // Skip auth check for Telegram auth routes
+    if (req.path.startsWith('/telegram-auth/')) {
+      return next();
+    }
+
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }

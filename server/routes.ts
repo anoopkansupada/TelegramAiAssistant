@@ -35,8 +35,8 @@ interface StatusUpdate {
   lastChecked: string;
 }
 
-export function registerRoutes(app: Express): Server {
-  setupAuth(app);
+export async function registerRoutes(app: Express): Promise<Server> {
+  await setupAuth(app);  
 
   // Require authentication for all /api routes
   app.use("/api", (req, res, next) => {

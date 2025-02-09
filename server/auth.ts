@@ -28,12 +28,31 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export function setupAuth(app: Express) {
+// Create default admin user if none exists
+async function ensureDefaultUser() {
+  const adminUsername = "admin";
+  let admin = await storage.getUserByUsername(adminUsername);
+
+  if (!admin) {
+    console.log("Creating default admin user");
+    admin = await storage.createUser({
+      username: adminUsername,
+      password: await hashPassword("admin"),
+    });
+  }
+
+  return admin;
+}
+
+export async function setupAuth(app: Express) {
   const sessionSettings: session.SessionOptions = {
     secret: process.env.REPL_ID!,
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true, // Changed to true to support auto-login
     store: storage.sessionStore,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    }
   };
 
   if (app.get("env") === "production") {
@@ -43,6 +62,22 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Create default admin user
+  const defaultUser = await ensureDefaultUser();
+
+  // Auto-login middleware
+  app.use(async (req, res, next) => {
+    if (!req.isAuthenticated()) {
+      await new Promise<void>((resolve, reject) => {
+        req.login(defaultUser, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+    next();
+  });
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
@@ -61,6 +96,7 @@ export function setupAuth(app: Express) {
     done(null, user);
   });
 
+  // Keep existing auth routes for future use
   app.post("/api/register", async (req, res, next) => {
     const existingUser = await storage.getUserByUsername(req.body.username);
     if (existingUser) {
@@ -90,7 +126,6 @@ export function setupAuth(app: Express) {
   });
 
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(req.user);
   });
 }

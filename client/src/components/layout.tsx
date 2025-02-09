@@ -22,6 +22,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Header } from "@/pages/components/Header";
+import { Footer } from "@/components/Footer";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logoutMutation } = useAuth();
@@ -40,9 +42,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
     {
       name: "People",
-      href: "/crm",
+      href: "/people",
       icon: Users,
-      current: location === "/crm",
+      current: location === "/people",
     },
     {
       name: "Companies",
@@ -55,15 +57,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex dark:bg-gray-900">
       {/* Sidebar */}
-      <div className="w-[2 md:w-[320px] lg:w-[360px]80px] flex flex-col border-r bg-card/50 backdrop-blur dark:bg-gray-900 dark:border-gray-800">
+      <div className="w-[280px] flex flex-col border-r bg-card/50 backdrop-blur dark:bg-gray-900 dark:border-gray-800">
         {/* Logo area */}
-        <div className="h-[54px md:h-[60px] lg:h-[64px]] flex items-center gap-2 px-4 border-b dark:border-gray-800">
+        <div className="h-[60px] flex items-center gap-2 px-4 border-b dark:border-gray-800">
           <MessageSquare className="h-[16px] w-[16px] text-primary dark:text-gray-400 stroke-[1.5px]" />
           <span className="font-semibold text-[13px] tracking-[-0.01em] dark:text-gray-200">TelegramCRM</span>
         </div>
 
         {/* Command Menu */}
-        <div className=" lg:px-4 lg:py-3px-2 py-2">
+        <div className="px-4 py-3">
           <Button 
             variant="outline" 
             className="w-full justify-between text-muted-foreground hover:text-foreground dark:bg-gray-800/50 dark:border-gray-700 h-[32px] px-2 text-[11px]"
@@ -93,28 +95,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        {/* Workspace Selector */}
-        <div className="px-2 py-1 border-t dark:border-gray-800">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                className="w-full justify-between hover:bg-accent h-[32px] px-2"
-              >
-                <div className="flex items-center">
-                  <Avatar className="h-[18px] w-[18px] mr-1.5" />
-                  <span className="text-[11px] font-medium">Workspace</span>
-                </div>
-                <ChevronDown className="h-[14px] w-[14px] stroke-[1.5px]" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[270px]">
-              <DropdownMenuItem className="text-[11px]">Settings</DropdownMenuItem>
-              <DropdownMenuItem className="text-[11px]">Create New Workspace</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
         {/* User Menu */}
         <div className="px-2 py-1 border-t dark:border-gray-800">
           <div className="flex items-center justify-between px-2 py-1.5">
@@ -141,32 +121,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="h-[54px] border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-4 dark:bg-gray-900 dark:border-gray-800">
-          <h1 className="text-[13px] font-semibold tracking-[-0.01em] dark:text-gray-200">
-            {navigation.find((item) => item.current)?.name || "Dashboard"}
-          </h1>
-          <div className="flex items-center gap-1.5">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-[28px] w-[28px] hover:bg-accent"
-            >
-              <BellIcon className="h-[16px] w-[16px] stroke-[1.5px]" />
-            </Button>
-            <Button 
-              className="h-[28px] px-2.5 shadow-sm text-[11px] font-medium"
-            >
-              <Plus className="h-[14px] w-[14px] mr-1.5 stroke-[1.5px]" />
-              Add New
-            </Button>
-          </div>
-        </header>
+        {/* Header */}
+        <Header />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto p-4">
+        <main className="flex-1 overflow-auto">
           {children}
         </main>
+
+        {/* Footer */}
+        <Footer />
       </div>
     </div>
   );

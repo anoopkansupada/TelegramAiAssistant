@@ -12,7 +12,9 @@ import { Avatar } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Filter, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Filter, Search, Plus, ArrowUp, ArrowDown } from "lucide-react";
+import { Company } from "@shared/schema";
 
 export default function CompaniesPage() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -21,7 +23,7 @@ export default function CompaniesPage() {
     direction: 'asc' | 'desc';
   } | null>(null);
 
-  const { data: companies = [] } = useQuery({
+  const { data: companies = [] } = useQuery<Company[]>({
     queryKey: ['/api/companies'],
   });
 
@@ -29,7 +31,7 @@ export default function CompaniesPage() {
     if (selectedRows.size === companies.length) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(companies.map((company: any) => company.id)));
+      setSelectedRows(new Set(companies.map((company) => company.id)));
     }
   };
 
@@ -46,82 +48,81 @@ export default function CompaniesPage() {
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-1.5">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-[14px] w-[14px] text-muted-foreground stroke-[1.5px]" />
-            <Input 
-              placeholder="Search..." 
-              className="w-[240px] h-[32px] text-[11px] pl-8 bg-background"
-            />
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-[32px] px-2.5 text-[11px] font-medium flex items-center gap-1.5"
-          >
-            <Filter className="h-[14px] w-[14px] stroke-[1.5px]" />
-            Filter
-          </Button>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1">Companies</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your organization contacts
+          </p>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-[32px] px-2.5 text-[11px] font-medium"
-          >
-            Options
-          </Button>
-        </div>
+        <Button>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Company
+        </Button>
       </div>
 
-      <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[40px] p-0">
-                <div className="h-[40px] flex items-center justify-center">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search companies..." 
+                className="pl-8 w-[300px]"
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex items-center gap-2"
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+            </Button>
+          </div>
+        </div>
+
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[40px]">
                   <Checkbox 
-                    className="h-[14px] w-[14px]"
                     checked={selectedRows.size === companies.length && companies.length > 0}
                     onCheckedChange={handleSelectAll}
                   />
-                </div>
-              </TableHead>
-              <TableHead className="text-[11px] font-medium cursor-pointer hover:bg-accent/50" onClick={() => handleSort('name')}>
-                <div className="flex items-center">
-                  Name
-                  {sortConfig?.key === 'name' && (
-                    sortConfig.direction === 'asc' ? 
-                    <ArrowUp className="h-3 w-3 stroke-[1.5px]" /> : 
-                    <ArrowDown className="h-3 w-3 stroke-[1.5px]" />
-                  )}
-                </div>
-              </TableHead>
-              <TableHead className="text-[11px] font-medium">Domain Name</TableHead>
-              <TableHead className="text-[11px] font-medium">Created by</TableHead>
-              <TableHead className="text-[11px] font-medium">Account Owner</TableHead>
-              <TableHead className="text-[11px] font-medium cursor-pointer hover:bg-accent/50" onClick={() => handleSort('createdAt')}>
-                <div className="flex items-center">
-                  Creation date
-                  {sortConfig?.key === 'createdAt' && (
-                    sortConfig.direction === 'asc' ? 
-                    <ArrowUp className="h-3 w-3 stroke-[1.5px]" /> : 
-                    <ArrowDown className="h-3 w-3 stroke-[1.5px]" />
-                  )}
-                </div>
-              </TableHead>
-              <TableHead className="text-[11px] font-medium text-right">Employees</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {companies.map((company: any) => (
-              <TableRow key={company.id} className="h-[40px] hover:bg-accent/50">
-                <TableCell className="p-0">
-                  <div className="h-[40px] flex items-center justify-center">
+                </TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-2">
+                    Name
+                    {sortConfig?.key === 'name' && (
+                      sortConfig.direction === 'asc' ? 
+                      <ArrowUp className="h-4 w-4" /> : 
+                      <ArrowDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </TableHead>
+                <TableHead>Industry</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Size</TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort('createdAt')}>
+                  <div className="flex items-center gap-2">
+                    Created
+                    {sortConfig?.key === 'createdAt' && (
+                      sortConfig.direction === 'asc' ? 
+                      <ArrowUp className="h-4 w-4" /> : 
+                      <ArrowDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {companies.map((company) => (
+                <TableRow key={company.id}>
+                  <TableCell>
                     <Checkbox 
-                      className="h-[14px] w-[14px]"
                       checked={selectedRows.has(company.id)}
                       onCheckedChange={(checked) => {
                         const newSelected = new Set(selectedRows);
@@ -133,43 +134,51 @@ export default function CompaniesPage() {
                         setSelectedRows(newSelected);
                       }}
                     />
-                  </div>
-                </TableCell>
-                <TableCell className="py-0">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-[20px] w-[20px]" />
-                    <span className="text-[11px] font-medium">{company.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="py-0">
-                  <Badge variant="secondary" className="h-[20px] px-2 text-[11px] font-normal bg-accent hover:bg-accent">
-                    {company.domain}
-                  </Badge>
-                </TableCell>
-                <TableCell className="py-0">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-[16px] w-[16px]" />
-                    <span className="text-[11px]">{company.createdBy || 'System'}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="py-0">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-[16px] w-[16px]" />
-                    <span className="text-[11px]">{company.accountOwner}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="py-0">
-                  <span className="text-[11px] text-muted-foreground">
-                    about 2 months ago
-                  </span>
-                </TableCell>
-                <TableCell className="py-0 text-right">
-                  <span className="text-[11px] text-muted-foreground">{company.employeeCount || '-'}</span>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8" />
+                      <div>
+                        <div className="font-medium">{company.name}</div>
+                        {company.email && (
+                          <div className="text-sm text-muted-foreground">
+                            {company.email}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {company.industry && (
+                      <Badge variant="secondary">
+                        {company.industry}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {company.city && company.country && (
+                      <span className="text-sm text-muted-foreground">
+                        {`${company.city}, ${company.country}`}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {company.size && (
+                      <span className="text-sm text-muted-foreground">
+                        {company.size}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">
+                      {new Date(company.createdAt).toLocaleDateString()}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

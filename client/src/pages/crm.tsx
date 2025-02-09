@@ -3,9 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Contact, Company, Message, insertContactSchema, insertCompanySchema } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { 
-  Card, CardContent, CardHeader, 
-  CardTitle, CardDescription 
+import {
+  Card, CardContent, CardHeader,
+  CardTitle, CardDescription
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -16,24 +16,26 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { 
-  Form, FormControl, FormField, 
-  FormItem, FormLabel, FormMessage 
+import {
+  Form, FormControl, FormField,
+  FormItem, FormLabel, FormMessage
 } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { 
+import {
   Users, Building2, ArrowLeft, Plus,
-  MessageSquare, ChevronRight 
+  MessageSquare, ChevronRight
 } from "lucide-react";
-import { 
-  Select, SelectContent, SelectItem, 
-  SelectTrigger, SelectValue 
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Header } from "@/pages/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function CRM() {
   const { toast } = useToast();
@@ -101,16 +103,7 @@ export default function CRM() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-          </Link>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
@@ -134,10 +127,10 @@ export default function CRM() {
                     <DialogTitle>Add New Contact</DialogTitle>
                   </DialogHeader>
                   <Form {...contactForm}>
-                    <form onSubmit={contactForm.handleSubmit(data => 
+                    <form onSubmit={contactForm.handleSubmit(data =>
                       createContactMutation.mutate(data)
-                    )} 
-                    className="space-y-6">
+                    )}
+                      className="space-y-6">
                       {/* Basic Information */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-medium">Basic Information</h3>
@@ -320,8 +313,8 @@ export default function CRM() {
                             name="preferredContactMethod"
                             render={({ field }) => (
                               <FormItem>
-f                                <FormLabel>Preferred Contact Method</FormLabel>
-                                <Select 
+                                <FormLabel>Preferred Contact Method</FormLabel>
+                                <Select
                                   onValueChange={field.onChange}
                                   value={field.value}
                                 >
@@ -365,7 +358,7 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Status</FormLabel>
-                              <Select 
+                              <Select
                                 onValueChange={field.onChange}
                                 value={field.value}
                                 defaultValue="active"
@@ -392,8 +385,8 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                             <FormItem>
                               <FormLabel>Tags (comma-separated)</FormLabel>
                               <FormControl>
-                                <Input 
-                                  {...field} 
+                                <Input
+                                  {...field}
                                   onChange={(e) => {
                                     const tags = e.target.value.split(',').map(tag => tag.trim());
                                     field.onChange(tags);
@@ -416,7 +409,7 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Company</FormLabel>
-                              <Select 
+                              <Select
                                 onValueChange={(value) => field.onChange(parseInt(value))}
                                 value={field.value?.toString()}
                               >
@@ -427,8 +420,8 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                                 </FormControl>
                                 <SelectContent>
                                   {companies?.map((company) => (
-                                    <SelectItem 
-                                      key={company.id} 
+                                    <SelectItem
+                                      key={company.id}
                                       value={company.id.toString()}
                                     >
                                       {company.name}
@@ -442,8 +435,8 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                         />
                       </div>
 
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         className="w-full"
                         disabled={createContactMutation.isPending}
                       >
@@ -497,10 +490,10 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                     <DialogTitle>Add New Company</DialogTitle>
                   </DialogHeader>
                   <Form {...companyForm}>
-                    <form onSubmit={companyForm.handleSubmit(data => 
+                    <form onSubmit={companyForm.handleSubmit(data =>
                       createCompanyMutation.mutate(data)
-                    )} 
-                    className="space-y-6">
+                    )}
+                      className="space-y-6">
                       {/* Basic Information */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-medium">Basic Information</h3>
@@ -680,7 +673,7 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Company Size</FormLabel>
-                                <Select 
+                                <Select
                                   onValueChange={field.onChange}
                                   value={field.value}
                                 >
@@ -708,7 +701,7 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Annual Revenue</FormLabel>
-                                <Select 
+                                <Select
                                   onValueChange={field.onChange}
                                   value={field.value}
                                 >
@@ -742,8 +735,8 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                             <FormItem>
                               <FormLabel>Tags (comma-separated)</FormLabel>
                               <FormControl>
-                                <Input 
-                                  {...field} 
+                                <Input
+                                  {...field}
                                   onChange={(e) => {
                                     const tags = e.target.value.split(',').map(tag => tag.trim());
                                     field.onChange(tags);
@@ -757,8 +750,8 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                         />
                       </div>
 
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         className="w-full"
                         disabled={createCompanyMutation.isPending}
                       >
@@ -771,44 +764,44 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
             </CardHeader>
             <CardContent>
               {companies && companies.length > 0 ? (
-                      <div className="space-y-4">
-                        {companies.map((company) => (
-                          <div
-                            key={company.id}
-                            className="p-4 rounded-lg border hover:border-primary transition-colors"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <Building2 className="h-5 w-5 text-primary" />
-                                <h3 className="font-medium">{company.name}</h3>
-                              </div>
-                              {company.industry && (
-                                <Badge variant="secondary">{company.industry}</Badge>
-                              )}
-                            </div>
-                            {company.description && (
-                              <p className="text-sm text-muted-foreground mb-2">
-                                {company.description}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {company.tags?.map((tag) => (
-                                <Badge key={tag} variant="outline">
-                                  {tag}
-                                </Badge>
-                              ))}
-                            </div>
-                            {(company.city || company.country) && (
-                              <p className="text-sm text-muted-foreground mt-2">
-                                📍 {[company.city, company.country].filter(Boolean).join(', ')}
-                              </p>
-                            )}
-                          </div>
+                <div className="space-y-4">
+                  {companies.map((company) => (
+                    <div
+                      key={company.id}
+                      className="p-4 rounded-lg border hover:border-primary transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-5 w-5 text-primary" />
+                          <h3 className="font-medium">{company.name}</h3>
+                        </div>
+                        {company.industry && (
+                          <Badge variant="secondary">{company.industry}</Badge>
+                        )}
+                      </div>
+                      {company.description && (
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {company.description}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {company.tags?.map((tag) => (
+                          <Badge key={tag} variant="outline">
+                            {tag}
+                          </Badge>
                         ))}
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No companies yet</p>
-                    )}
+                      {(company.city || company.country) && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          📍 {[company.city, company.country].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No companies yet</p>
+              )}
             </CardContent>
           </Card>
 
@@ -817,7 +810,7 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
             <CardHeader>
               <CardTitle>Messages</CardTitle>
               <CardDescription>
-                {selectedContactId 
+                {selectedContactId
                   ? "Recent messages and sentiment"
                   : "Select a contact to view messages"}
               </CardDescription>
@@ -836,7 +829,7 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
                       <p className="mt-1">{message.content}</p>
                       {message.sentiment && (
                         <span className={`text-xs px-2 py-1 rounded-full ${
-                          message.sentiment === "positive" 
+                          message.sentiment === "positive"
                             ? "bg-green-100 text-green-800"
                             : message.sentiment === "negative"
                             ? "bg-red-100 text-red-800"
@@ -857,6 +850,9 @@ f                                <FormLabel>Preferred Contact Method</FormLabel>
           </Card>
         </div>
       </main>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }

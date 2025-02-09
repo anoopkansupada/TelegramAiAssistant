@@ -12,6 +12,7 @@ import Dashboard from "@/pages/dashboard";
 import CRM from "@/pages/crm";
 import Channels from "@/pages/channels";
 import { TestSuggestions } from "@/components/test-suggestions";
+import { TestMessage } from "@/components/test-message";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
             <ProtectedRoute path="/channels" component={Channels} />
             <ProtectedRoute path="/telegram-login" component={TelegramLogin} />
             <ProtectedRoute path="/test-suggestions" component={TestSuggestions} />
+            <ProtectedRoute path="/test-message" component={TestMessage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

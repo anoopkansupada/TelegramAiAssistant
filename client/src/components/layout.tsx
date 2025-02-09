@@ -55,15 +55,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex dark:bg-gray-900">
       {/* Sidebar */}
-      <div className="w-[280px] flex flex-col border-r bg-card/50 backdrop-blur dark:bg-gray-900 dark:border-gray-800">
+      <div className="w-[2 md:w-[320px] lg:w-[360px]80px] flex flex-col border-r bg-card/50 backdrop-blur dark:bg-gray-900 dark:border-gray-800">
         {/* Logo area */}
-        <div className="h-[54px] flex items-center gap-2 px-4 border-b dark:border-gray-800">
+        <div className="h-[54px md:h-[60px] lg:h-[64px]] flex items-center gap-2 px-4 border-b dark:border-gray-800">
           <MessageSquare className="h-[16px] w-[16px] text-primary dark:text-gray-400 stroke-[1.5px]" />
           <span className="font-semibold text-[13px] tracking-[-0.01em] dark:text-gray-200">TelegramCRM</span>
         </div>
 
         {/* Command Menu */}
-        <div className="px-2 py-2">
+        <div className=" lg:px-4 lg:py-3px-2 py-2">
           <Button 
             variant="outline" 
             className="w-full justify-between text-muted-foreground hover:text-foreground dark:bg-gray-800/50 dark:border-gray-700 h-[32px] px-2 text-[11px]"

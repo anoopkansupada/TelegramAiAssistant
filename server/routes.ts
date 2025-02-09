@@ -426,6 +426,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add this route after the existing routes
+  app.post("/api/test/telegram-message", async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      // Simulate a telegram message
+      const mockContact = await storage.createContact({
+        firstName: "Test",
+        lastName: "User",
+        telegramId: "test-" + Date.now(),
+        jobTitle: "Test Position",
+        createdById: req.user!.id,
+      });
+
+      // Create the message
+      const dbMessage = await storage.createMessage({
+        contactId: mockContact.id,
+        content: message,
+        sentiment: "neutral"
+      });
+
+      // Generate suggestions
+      const suggestions = await generateResponseSuggestions(
+        message,
+        {
+          previousMessages: [],
+          contactInfo: {
+            name: `${mockContact.firstName} ${mockContact.lastName}`,
+            jobTitle: mockContact.jobTitle,
+          }
+        }
+      );
+
+      if (suggestions && suggestions.length > 0) {
+        await storage.createMessageSuggestions(dbMessage.id, suggestions);
+      }
+
+      res.json({ 
+        message: dbMessage,
+        suggestions,
+        contact: mockContact
+      });
+
+    } catch (error: any) {
+      console.error("[Route] Test message error:", error);
+      res.status(500).json({ 
+        message: "Failed to process test message",
+        error: error.message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // Initialize WebSocket server with a specific path
@@ -474,4 +529,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   return httpServer;
+}
+
+// Placeholder function -  replace with actual implementation
+async function generateResponseSuggestions(message: string, context: any): Promise<any[]> {
+  // Replace this with your actual suggestion generation logic
+  return [
+    { suggestion: "This is a test suggestion 1" },
+    { suggestion: "This is a test suggestion 2" }
+  ];
 }

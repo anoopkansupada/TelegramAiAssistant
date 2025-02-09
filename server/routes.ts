@@ -300,15 +300,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Add this after the other Telegram auth routes
+  // Update the status check route with better logging
   app.get("/api/telegram-auth/status", async (req, res) => {
     try {
-      const telegramSession = req.session.telegramSession;
+      console.log("[Route] Checking Telegram auth status:", {
+        hasSession: !!req.session,
+        hasTelegramSession: !!req.session?.telegramSession,
+        sessionID: req.sessionID
+      });
+
+      const telegramSession = req.session?.telegramSession;
       if (!telegramSession) {
+        console.log("[Route] No Telegram session found");
         return res.json({ connected: false });
       }
 
-      console.log("[Route] Checking Telegram connection status");
+      console.log("[Route] Found Telegram session, checking connection");
       const client = await getOrCreateClient(telegramSession);
 
       // Get account info to verify connection

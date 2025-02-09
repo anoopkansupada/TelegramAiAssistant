@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BotIcon } from "lucide-react";
+import { BotIcon, CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const telegramAuthSchema = z.object({
   phoneNumber: z.string().min(1, "Phone number is required"),
@@ -18,15 +19,63 @@ const telegramAuthSchema = z.object({
 
 type TelegramAuthForm = z.infer<typeof telegramAuthSchema>;
 
+interface ConnectionStatus {
+  connected: boolean;
+  user?: {
+    id: string;
+    username: string;
+    firstName?: string;
+  };
+  lastChecked: string;
+}
+
 export default function TelegramLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
+  const [status, setStatus] = useState<ConnectionStatus | null>(null);
 
   const form = useForm<TelegramAuthForm>({
     resolver: zodResolver(telegramAuthSchema),
   });
+
+  // WebSocket connection for real-time status updates
+  useEffect(() => {
+    // Check initial status
+    fetch('/api/telegram-auth/status')
+      .then(res => res.json())
+      .then(data => {
+        setStatus(data);
+        if (data.connected) {
+          setAwaitingCode(false);
+          setRequires2FA(false);
+        }
+      });
+
+    // Setup WebSocket connection
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/status`);
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'status') {
+        setStatus(data);
+        if (data.connected) {
+          setAwaitingCode(false);
+          setRequires2FA(false);
+        }
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const onSubmit = async (data: TelegramAuthForm) => {
     try {
@@ -115,6 +164,47 @@ export default function TelegramLogin() {
     }
   };
 
+  // If already connected, show status and option to disconnect
+  if (status?.connected) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1">
+            <div className="flex items-center gap-2">
+              <BotIcon className="h-6 w-6 text-primary" />
+              <CardTitle className="text-2xl">Telegram Connection</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Alert className="mb-4">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <AlertDescription className="ml-2">
+                Connected as {status.user?.username || status.user?.firstName || 'Unknown'}
+              </AlertDescription>
+            </Alert>
+            <p className="text-sm text-muted-foreground mb-4">
+              Last checked: {new Date(status.lastChecked).toLocaleString()}
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={() => setLocation('/channels')} className="flex-1">
+                View Channels
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={async () => {
+                  await fetch('/api/telegram-auth/logout', { method: 'POST' });
+                  window.location.reload();
+                }}
+              >
+                Disconnect
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
@@ -123,6 +213,14 @@ export default function TelegramLogin() {
             <BotIcon className="h-6 w-6 text-primary" />
             <CardTitle className="text-2xl">Connect Telegram Account</CardTitle>
           </div>
+          {status && (
+            <Alert>
+              <XCircle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="ml-2">
+                Not connected
+              </AlertDescription>
+            </Alert>
+          )}
         </CardHeader>
         <CardContent>
           <Form {...form}>

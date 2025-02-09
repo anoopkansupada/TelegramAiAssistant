@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from 'ws';
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { sendAnnouncement, generateChannelInviteLink, revokeChannelInviteLink } from "./telegram";
@@ -20,6 +21,18 @@ declare module 'express-session' {
     targetChannelIds?: number[];
     requires2FA?: boolean;
   }
+}
+
+// Add WebSocket types
+interface StatusUpdate {
+  type: 'status';
+  connected: boolean;
+  user?: {
+    id: string;
+    username: string;
+    firstName?: string;
+  };
+  lastChecked: string;
 }
 
 export function registerRoutes(app: Express): Server {
@@ -301,7 +314,7 @@ export function registerRoutes(app: Express): Server {
         firstName: me?.firstName
       });
 
-      res.json({ 
+      res.json({
         connected: true,
         user: {
           id: me?.id,
@@ -592,5 +605,50 @@ export function registerRoutes(app: Express): Server {
   });
 
   const httpServer = createServer(app);
+
+  // Initialize WebSocket server with a specific path
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: '/ws/status'
+  });
+
+  // Store active connections
+  const clients = new Set<WebSocket>();
+
+  wss.on('connection', (ws: WebSocket) => {
+    console.log('[WebSocket] Client connected');
+    clients.add(ws);
+
+    // Send initial status
+    const sessionData = storage.sessionStore.get;
+    if (sessionData?.telegramSession) {
+      ws.send(JSON.stringify({
+        type: 'status',
+        connected: true,
+        lastChecked: new Date().toISOString()
+      }));
+    } else {
+      ws.send(JSON.stringify({
+        type: 'status',
+        connected: false,
+        lastChecked: new Date().toISOString()
+      }));
+    }
+
+    ws.on('close', () => {
+      console.log('[WebSocket] Client disconnected');
+      clients.delete(ws);
+    });
+  });
+
+  // Export broadcast function to be used by userbot client
+  (global as any).broadcastStatus = (status: StatusUpdate) => {
+    clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(status));
+      }
+    });
+  };
+
   return httpServer;
 }

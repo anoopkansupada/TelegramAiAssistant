@@ -17,27 +17,64 @@ const clientInstance: ClientInstance = {
   connected: false
 };
 
-// Connection check interval (5 minutes)
-const CONNECTION_CHECK_INTERVAL = 5 * 60 * 1000;
+// Connection check interval (30 seconds for more responsive status updates)
+const CONNECTION_CHECK_INTERVAL = 30 * 1000;
 
-// Ping the client periodically to keep connection alive
-setInterval(async () => {
+// Broadcast status function from global scope
+const broadcastStatus = (global as any).broadcastStatus;
+
+// Check connection and broadcast status
+async function checkAndBroadcastStatus() {
   try {
     if (clientInstance.client && clientInstance.connected) {
       console.log("[UserBot] Checking connection status...");
-      const connected = await clientInstance.client.checkConnection();
-      console.log("[UserBot] Connection status:", connected);
-      clientInstance.connected = connected;
+      try {
+        const me = await clientInstance.client.getMe();
+        console.log("[UserBot] Connection active, user:", {
+          id: me?.id,
+          username: me?.username
+        });
 
-      if (!connected) {
-        console.log("[UserBot] Connection lost, will reconnect on next use");
+        clientInstance.connected = true;
+        broadcastStatus({
+          type: 'status',
+          connected: true,
+          user: {
+            id: me?.id?.toString(),
+            username: me?.username,
+            firstName: me?.firstName
+          },
+          lastChecked: new Date().toISOString()
+        });
+      } catch (error) {
+        console.log("[UserBot] Connection check failed:", error);
+        clientInstance.connected = false;
+        broadcastStatus({
+          type: 'status',
+          connected: false,
+          lastChecked: new Date().toISOString()
+        });
       }
+    } else if (clientInstance.client) {
+      console.log("[UserBot] Client exists but not connected");
+      broadcastStatus({
+        type: 'status',
+        connected: false,
+        lastChecked: new Date().toISOString()
+      });
     }
   } catch (error) {
-    console.error("[UserBot] Error checking connection:", error);
-    clientInstance.connected = false;
+    console.error("[UserBot] Error in status check:", error);
+    broadcastStatus({
+      type: 'status',
+      connected: false,
+      lastChecked: new Date().toISOString()
+    });
   }
-}, CONNECTION_CHECK_INTERVAL);
+}
+
+// Start periodic status checks
+setInterval(checkAndBroadcastStatus, CONNECTION_CHECK_INTERVAL);
 
 export async function getOrCreateClient(session: string): Promise<TelegramClient> {
   try {

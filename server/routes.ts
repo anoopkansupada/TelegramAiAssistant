@@ -93,8 +93,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Telegram Channels
   app.get("/api/telegram-channels", async (req, res) => {
-    const channels = await storage.listTelegramChannels();
-    res.json(channels);
+    try {
+      console.log("[Route] GET /api/telegram-channels - Starting retrieval");
+
+      const telegramSession = req.session?.telegramSession;
+      if (!telegramSession) {
+        console.log("[Route] No telegram session found");
+        return res.status(401).json({ message: "Telegram authentication required" });
+      }
+
+      console.log("[Route] Found telegram session, getting client");
+      const client = await getOrCreateClient(telegramSession);
+
+      console.log("[Route] Getting dialogs");
+      const dialogs = await client.getDialogs({
+        limit: 100,
+        offsetDate: 0,
+        offsetId: 0,
+        offsetPeer: new Api.InputPeerEmpty(),
+      });
+
+      console.log(`[Route] Retrieved ${dialogs.length} dialogs`);
+      console.log("[Route] Dialog details:", dialogs.map(d => ({
+        name: d.name,
+        id: d.id,
+        type: d.isChannel ? 'channel' : d.isGroup ? 'group' : 'private'
+      })));
+
+      // Process and store each dialog
+      const processResults = await Promise.all(dialogs.map(async (dialog) => {
+        if (!dialog.entity) {
+          console.log("[Route] Skipping dialog - no entity:", dialog);
+          return null;
+        }
+
+        const chat = dialog.entity;
+        console.log("[Route] Processing chat:", {
+          id: chat.id,
+          className: chat.className,
+          name: dialog.name,
+          isChannel: dialog.isChannel,
+          isGroup: dialog.isGroup
+        });
+
+        // Get or create channel in database
+        let dbChannel = await storage.getTelegramChannelByTelegramId(chat.id.toString());
+        if (!dbChannel) {
+          console.log("[Route] Creating new channel record for:", chat.id);
+          dbChannel = await storage.createTelegramChannel({
+            telegramId: chat.id.toString(),
+            name: dialog.name || 'Untitled',
+            type: dialog.isChannel ? 'channel' : dialog.isGroup ? 'group' : 'private',
+            createdById: req.user!.id,
+          });
+        }
+
+        return dbChannel;
+      }));
+
+      // Filter out null results and return valid channels
+      const channels = processResults.filter(Boolean);
+      console.log(`[Route] Returning ${channels.length} channels`);
+
+      res.json(channels);
+    } catch (error) {
+      console.error("[Route] Failed to list channels:", error);
+      res.status(500).json({ message: "Failed to list channels" });
+    }
   });
 
   // Channel Invitations

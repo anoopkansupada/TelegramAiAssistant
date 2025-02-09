@@ -341,18 +341,26 @@ export function registerRoutes(app: Express): Server {
       console.log("[Route] Getting or creating client for session");
       const client = await getOrCreateClient(telegramSession);
 
-      console.log("[Route] Starting to fetch dialogs with parameters:", {
-        limit: 100,
+      console.log("[Route] Starting to fetch dialogs with parameters");
+
+      // First try to get the total number of dialogs
+      const initialDialogs = await client.getDialogs({
+        limit: 1,
         offsetDate: 0,
         offsetId: 0,
-        offsetPeer: "me"
+        offsetPeer: new Api.InputPeerEmpty(),
       });
 
+      console.log(`[Route] Initial dialog fetch complete, attempting to get all dialogs`);
+
+      // Now fetch all dialogs with proper parameters
       const dialogs = await client.getDialogs({
-        limit: 100, // Increased limit to get more chats
-        offsetDate: 0, // Start from the most recent
-        offsetId: 0, // Start from the beginning
-        offsetPeer: "me", // Start from our own peer
+        limit: 500, // Increased limit substantially
+        offsetDate: 0,
+        offsetId: 0,
+        offsetPeer: new Api.InputPeerEmpty(),
+        includeSpam: true, // Include spam chats
+        excludePinned: false, // Include pinned chats
       });
 
       console.log(`[Route] Successfully fetched ${dialogs.length} dialogs`);
@@ -373,10 +381,6 @@ export function registerRoutes(app: Express): Server {
           unreadCount: dialog.unreadCount,
           date: dialog.date ? new Date(dialog.date * 1000).toISOString() : null,
           hasMessage: !!dialog.message,
-          peer: dialog.peer ? {
-            className: dialog.peer.className,
-            id: dialog.peer.id
-          } : 'No peer'
         });
       });
 

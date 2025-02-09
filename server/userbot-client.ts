@@ -53,27 +53,33 @@ export async function getOrCreateClient(session: string): Promise<TelegramClient
     if (clientInstance.client && clientInstance.session === session) {
       // Check if the client is still connected
       console.log("[UserBot] Checking existing client connection");
-      const connected = await clientInstance.client.checkConnection();
-      console.log("[UserBot] Existing client connection status:", connected);
-
-      if (connected) {
-        console.log("[UserBot] Reusing existing connected client");
-        clientInstance.lastUsed = Date.now();
-        clientInstance.connected = true;
-        return clientInstance.client;
-      }
-
-      // If not connected, try to reconnect
       try {
-        console.log("[UserBot] Attempting to reconnect existing client");
-        await clientInstance.client.connect();
-        console.log("[UserBot] Successfully reconnected existing client");
+        const me = await clientInstance.client.getMe();
+        console.log("[UserBot] Existing client is connected, user:", {
+          id: me?.id,
+          username: me?.username
+        });
         clientInstance.lastUsed = Date.now();
         clientInstance.connected = true;
         return clientInstance.client;
       } catch (error) {
-        console.error("[UserBot] Failed to reconnect existing client:", error);
-        // If reconnection fails, proceed to create new client
+        console.log("[UserBot] Existing client check failed, reconnecting:", error);
+        // If check fails, try to reconnect
+        try {
+          console.log("[UserBot] Attempting to reconnect existing client");
+          await clientInstance.client.connect();
+          const me = await clientInstance.client.getMe();
+          console.log("[UserBot] Successfully reconnected existing client, user:", {
+            id: me?.id,
+            username: me?.username
+          });
+          clientInstance.lastUsed = Date.now();
+          clientInstance.connected = true;
+          return clientInstance.client;
+        } catch (error) {
+          console.error("[UserBot] Failed to reconnect existing client:", error);
+          // If reconnection fails, proceed to create new client
+        }
       }
     }
 

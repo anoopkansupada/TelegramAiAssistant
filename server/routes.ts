@@ -122,33 +122,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Process and store each dialog
       const processResults = await Promise.all(dialogs.map(async (dialog) => {
-        if (!dialog.entity) {
-          console.log("[Route] Skipping dialog - no entity:", dialog);
+        try {
+          if (!dialog.entity) {
+            console.log("[Route] Skipping dialog - no entity:", dialog);
+            return null;
+          }
+
+          const chat = dialog.entity;
+          console.log("[Route] Processing chat:", {
+            id: chat.id,
+            className: chat.className,
+            name: dialog.name,
+            isChannel: dialog.isChannel,
+            isGroup: dialog.isGroup
+          });
+
+          // Get or create channel in database
+          let dbChannel = await storage.getTelegramChannelByTelegramId(chat.id.toString());
+          if (!dbChannel) {
+            console.log("[Route] Creating new channel record for:", chat.id);
+            dbChannel = await storage.createTelegramChannel({
+              telegramId: chat.id.toString(),
+              name: dialog.name || 'Untitled',
+              type: dialog.isChannel ? 'channel' : dialog.isGroup ? 'group' : 'private',
+              createdById: req.user!.id,
+            });
+          }
+
+          return dbChannel;
+        } catch (error) {
+          console.error("[Route] Error processing dialog:", error);
           return null;
         }
-
-        const chat = dialog.entity;
-        console.log("[Route] Processing chat:", {
-          id: chat.id,
-          className: chat.className,
-          name: dialog.name,
-          isChannel: dialog.isChannel,
-          isGroup: dialog.isGroup
-        });
-
-        // Get or create channel in database
-        let dbChannel = await storage.getTelegramChannelByTelegramId(chat.id.toString());
-        if (!dbChannel) {
-          console.log("[Route] Creating new channel record for:", chat.id);
-          dbChannel = await storage.createTelegramChannel({
-            telegramId: chat.id.toString(),
-            name: dialog.name || 'Untitled',
-            type: dialog.isChannel ? 'channel' : dialog.isGroup ? 'group' : 'private',
-            createdById: req.user!.id,
-          });
-        }
-
-        return dbChannel;
       }));
 
       // Filter out null results and return valid channels

@@ -149,7 +149,7 @@ export default function ChannelsPage() {
           <Card key={channel.id}>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle className="text-lg font-medium">{channel.title}</CardTitle>
+                <CardTitle className="text-lg font-medium">{channel.name}</CardTitle>
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button size="sm">
@@ -288,9 +288,19 @@ export default function ChannelsPage() {
         {channels?.length === 0 && (
           <Card>
             <CardContent className="py-8">
-              <p className="text-center text-muted-foreground">
-                No channels found. Add the bot to a Telegram channel or group to see it here.
-              </p>
+              <div className="text-center">
+                <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h2 className="text-lg font-medium mb-2">Connect Your Telegram Account</h2>
+                <p className="text-muted-foreground mb-4">
+                  Connect your Telegram account to manage channels and create invitations
+                </p>
+                <Link href="/telegram-login">
+                  <Button>
+                    <Bot className="h-4 w-4 mr-2" />
+                    Connect Telegram
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}

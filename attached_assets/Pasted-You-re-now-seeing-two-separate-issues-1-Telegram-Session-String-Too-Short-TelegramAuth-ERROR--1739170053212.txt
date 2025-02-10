@@ -1,0 +1,104 @@
+You’re now seeing two separate issues:
+	1.	Telegram Session String Too Short
+
+[TelegramAuth] [ERROR] Session string too short [
+  {
+    "length": 5
+  }
+]
+
+This means the Telegram session string is still not being saved or read correctly.
+
+	2.	Neon Database WebSocket Connection Error
+
+TypeError: Cannot set property message of #<ErrorEvent> which has only a getter
+
+This error comes from @neondatabase/serverless and indicates that your database connection is failing.
+
+🛠 Fixing the Telegram Authentication Issue
+
+Since the session string is only 5 characters long, it’s not a valid Telegram session. Let’s fix that first.
+
+1️⃣ Manually Authenticate Telegram (Ensure a Proper Session)
+
+Run:
+
+rm telegram.session.json  # Delete any corrupt session file
+npx tsx
+
+Then enter this code:
+
+import { TelegramClient } from "telegram";
+import { StringSession } from "telegram/sessions";
+import input from "input"; // npm install input if needed
+
+const apiId = 123456; // Replace with your API ID
+const apiHash = "your_api_hash"; // Replace with your API Hash
+const session = new StringSession(""); // Start with an empty session
+
+const client = new TelegramClient(session, apiId, apiHash, { connectionRetries: 5 });
+
+(async () => {
+    await client.start({
+        phoneNumber: async () => await input.text("Enter your phone number: "),
+        password: async () => await input.text("Enter your password: "),
+        phoneCode: async () => await input.text("Enter the OTP from Telegram: "),
+        onError: (err) => console.log("[ERROR] Telegram authentication failed:", err),
+    });
+
+    console.log("Session saved:", client.session.save());
+
+    // Save the session to a file
+    require("fs").writeFileSync("telegram.session.json", client.session.save());
+})();
+
+2️⃣ Check If the Session File Exists
+
+Run:
+
+ls -la | grep telegram
+cat telegram.session.json
+
+	•	If telegram.session.json does not exist, repeat Step 1.
+	•	If telegram.session.json has less than 50 characters, authentication failed—repeat Step 1.
+
+🛠 Fixing the Neon Database WebSocket Error
+
+The error is related to your Neon PostgreSQL database connection. It’s likely failing due to:
+	1.	Missing or incorrect .env variables
+	2.	WebSocket connection issues
+	3.	Neon database being down
+
+1️⃣ Check .env for Database Credentials
+
+Run:
+
+cat .env
+
+Ensure you have:
+
+DATABASE_URL=postgresql://your_username:your_password@your_neon_host/db_name
+
+If missing, add the correct Neon database URL.
+
+2️⃣ Restart Your Server
+
+npx tsx server/index.ts
+
+3️⃣ If Error Persists, Switch to TCP Instead of WebSocket
+
+Modify your server/index.ts:
+
+import { Pool } from "pg";
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },  // Ensure SSL is enabled
+});
+
+🚀 Next Steps
+	1.	Fix Telegram authentication (ensure telegram.session.json is valid).
+	2.	Fix Neon database errors (check .env and use proper connection settings).
+	3.	Restart the server and test again.
+
+Let me know what happens! 🚀

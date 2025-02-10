@@ -2,35 +2,40 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
+import fs from "fs";
 import dotenv from "dotenv";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
 import { CustomLogger } from "./utils/logger";
 import { registerRoutes } from "./routes";
+import { db } from "./db";
+import { neonConfig } from "@neondatabase/serverless";
 
 dotenv.config();
 
 const logger = new CustomLogger("[TelegramAuth]");
+const SESSION_FILE_PATH = "./telegram.session.json";
 
-const app = express();
-app.use(express.json());
-app.use(cors());
-app.use(express.urlencoded({ extended: false }));
+// Configure neon to handle WebSocket errors gracefully
+(neonConfig as any).wssClosed = () => {
+  logger.warn("Database connection closed");
+};
+
+(neonConfig as any).wssError = (error: Error) => {
+  logger.error("Database connection error:", error);
+};
 
 // Validate session string format
 function isValidSessionString(session: string): boolean {
   try {
-    // Validate base64 format and minimum length
-    if (!session || session.length < 10) {
-      logger.error("Session string too short", { length: session.length });
+    if (!session) {
+      logger.error("Empty session string");
       return false;
     }
 
-    // Check if it's a valid base64 string with optional padding
-    const base64Regex = /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;
     const trimmedSession = session.trim();
-    if (!base64Regex.test(trimmedSession)) {
-      logger.error("Invalid base64 format", { session: trimmedSession.substring(0, 10) + '...' });
+    if (trimmedSession.length < 10) {
+      logger.error("Session string too short", { length: trimmedSession.length });
       return false;
     }
 
@@ -41,25 +46,38 @@ function isValidSessionString(session: string): boolean {
   }
 }
 
-const sessionString = process.env.TELEGRAM_SESSION || "";
-const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
-const apiHash = process.env.TELEGRAM_API_HASH || "";
+async function loadSessionString(): Promise<string> {
+  try {
+    // Try loading from environment variable first
+    let sessionString = process.env.TELEGRAM_SESSION;
+
+    // If not in env, try loading from file
+    if (!sessionString && fs.existsSync(SESSION_FILE_PATH)) {
+      sessionString = fs.readFileSync(SESSION_FILE_PATH, "utf8").trim();
+    }
+
+    return sessionString || "";
+  } catch (error) {
+    logger.error("Error loading session string", { error });
+    return "";
+  }
+}
 
 let client: TelegramClient | null = null;
 
 async function initializeTelegramClient() {
   try {
+    const sessionString = await loadSessionString();
+    const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+    const apiHash = process.env.TELEGRAM_API_HASH || "";
+
     if (!sessionString) {
       logger.error("Missing session string");
       return null;
     }
 
     if (!isValidSessionString(sessionString)) {
-      logger.error("Invalid session string format", { 
-        sessionLength: sessionString.length,
-        isBase64: /^[A-Za-z0-9+/=]+$/.test(sessionString.trim()),
-        sample: sessionString.substring(0, 20) + '...'
-      });
+      logger.error("Invalid session string format");
       return null;
     }
 
@@ -68,12 +86,9 @@ async function initializeTelegramClient() {
       connectionRetries: 5,
       useWSS: true,
       maxConcurrentDownloads: 10,
-      connection: {
-        autoReconnect: true,
-        maxRetries: 5,
-        delay: 1000,
-        timeout: 10000
-      }
+      deviceModel: "Replit CRM",
+      systemVersion: "1.0.0",
+      appVersion: "1.0.0"
     });
 
     await client.connect();
@@ -84,53 +99,66 @@ async function initializeTelegramClient() {
       throw new Error("Failed to get user info after connection");
     }
 
+    // Save working session to file
+    const savedSession = client.session.save() as unknown as string;
+    fs.writeFileSync(SESSION_FILE_PATH, savedSession);
+
     logger.info("✅ Successfully connected to Telegram!", { userId: me.id });
     return client;
   } catch (error) {
     logger.error("❌ Error connecting to Telegram:", error);
     if (error instanceof Error) {
-      logger.error("Stack trace:", error.stack?.split('\n'));
+      logger.error("Stack trace:", error.stack);
     }
     return null;
   }
 }
 
-// Configure session and auth before other middleware
-setupAuth(app);
-
-// Logging middleware
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
-
-(async () => {
+async function startServer() {
   try {
+    // Test database connection first
+    await db.execute('SELECT 1');
+    logger.info("✅ Database connection successful");
+
+    const app = express();
+    app.use(express.json());
+    app.use(cors());
+    app.use(express.urlencoded({ extended: false }));
+
+    // Configure session and auth before other middleware
+    setupAuth(app);
+
+    // Logging middleware
+    app.use((req, res, next) => {
+      const start = Date.now();
+      const path = req.path;
+      let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+      const originalResJson = res.json;
+      res.json = function (bodyJson, ...args) {
+        capturedJsonResponse = bodyJson;
+        return originalResJson.apply(res, [bodyJson, ...args]);
+      };
+
+      res.on("finish", () => {
+        const duration = Date.now() - start;
+        if (path.startsWith("/api")) {
+          let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+          if (capturedJsonResponse) {
+            logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+          }
+
+          if (logLine.length > 80) {
+            logLine = logLine.slice(0, 79) + "…";
+          }
+
+          log(logLine);
+        }
+      });
+
+      next();
+    });
+
     // Initialize Telegram client before setting up routes
     await initializeTelegramClient();
 
@@ -155,7 +183,13 @@ app.use((req, res, next) => {
       log(`serving on port ${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    logger.error("Failed to start server:", error);
     process.exit(1);
   }
-})();
+}
+
+// Start the server
+startServer().catch((error) => {
+  logger.error("Critical error starting server:", error);
+  process.exit(1);
+});

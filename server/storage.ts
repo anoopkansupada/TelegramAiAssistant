@@ -1,18 +1,8 @@
-import { db } from "./db";
-import { eq, sql, and } from "drizzle-orm";
-import { InsertUser, User, Contact, Company, Message, Announcement,
-         users, contacts, companies, messages, announcements,
-         TelegramChannel, telegramChannels, InsertContact, InsertCompany,
-         InsertMessage, InsertAnnouncement, InsertTelegramChannel,
-         channelInvitations, ChannelInvitation, InsertChannelInvitation,
-         TelegramChat, InsertTelegramChat, CompanySuggestion, InsertCompanySuggestion,
-         telegramChats, companySuggestions, messageSuggestions, InsertMessageSuggestion, MessageSuggestion,
-         telegramSessions, InsertTelegramSession, TelegramSession } from "@shared/schema";
+import { eq, and, sql } from "drizzle-orm";
+import { db, dbOps } from "./db";
+import { users, type User, type InsertUser, contacts, type Contact, type InsertContact, companies, type Company, type InsertCompany, messages, type Message, type InsertMessage, announcements, type Announcement, type InsertAnnouncement, telegramChannels, type TelegramChannel, type InsertTelegramChannel, channelInvitations, type ChannelInvitation, type InsertChannelInvitation, telegramChats, type TelegramChat, type InsertTelegramChat, companySuggestions, type CompanySuggestion, type InsertCompanySuggestion, messageSuggestions, type MessageSuggestion, type InsertMessageSuggestion, telegramSessions, type TelegramSession, type InsertTelegramSession, followupSchedules, type FollowupSchedule, type InsertFollowupSchedule } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
-import {
-  InsertFollowupSchedule, FollowupSchedule, followupSchedules
-} from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -21,20 +11,14 @@ export class DatabaseStorage {
 
   constructor() {
     this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000
+      checkPeriod: 86400000 // Cleanup expired sessions every 24 hours
     });
-    // Run cleanup every 24 hours
-    setInterval(() => this.cleanupExpiredSessions(), 24 * 60 * 60 * 1000);
   }
 
-  // Auth operations with error handling
+  // Auth operations
   async getUser(id: number): Promise<User | undefined> {
     try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, id))
-        .execute();
+      const [user] = await dbOps.selectWhere(users, eq(users.id, id));
       return user;
     } catch (error) {
       console.error('Error in getUser:', error);
@@ -44,11 +28,7 @@ export class DatabaseStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.username, username))
-        .execute();
+      const [user] = await dbOps.selectWhere(users, eq(users.username, username));
       return user;
     } catch (error) {
       console.error('Error in getUserByUsername:', error);
@@ -58,11 +38,7 @@ export class DatabaseStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     try {
-      const [user] = await db
-        .insert(users)
-        .values(insertUser)
-        .returning()
-        .execute();
+      const [user] = await dbOps.insert(users, insertUser);
       return user;
     } catch (error) {
       console.error('Error in createUser:', error);
@@ -72,12 +48,7 @@ export class DatabaseStorage {
 
   async updateUser(id: number, updates: Partial<User>): Promise<User> {
     try {
-      const [user] = await db
-        .update(users)
-        .set(updates)
-        .where(eq(users.id, id))
-        .returning()
-        .execute();
+      const [user] = await dbOps.update(users, updates, eq(users.id, id));
       return user;
     } catch (error) {
       console.error('Error in updateUser:', error);

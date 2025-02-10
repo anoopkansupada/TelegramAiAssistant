@@ -48,16 +48,20 @@ export async function setupAuth(app: Express) {
   app.use(passport.session());
 
   // Create default admin user if it doesn't exist
-  const adminUsername = "admin";
-  const admin = await storage.getUserByUsername(adminUsername);
-  if (!admin) {
-    console.log("Creating default admin user");
-    const hashedPassword = await hashPassword("admin");
-    await storage.createUser({
-      username: adminUsername,
-      password: hashedPassword,
-      role: "admin"
-    });
+  try {
+    const adminUsername = "admin";
+    const admin = await storage.getUserByUsername(adminUsername);
+    if (!admin) {
+      console.log("Creating default admin user");
+      const hashedPassword = await hashPassword("admin");
+      await storage.createUser({
+        username: adminUsername,
+        password: hashedPassword,
+        role: "admin"
+      });
+    }
+  } catch (error) {
+    console.error("Error setting up default admin:", error);
   }
 
   passport.use(

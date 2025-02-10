@@ -13,6 +13,7 @@ import Companies from "@/pages/companies";
 import People from "@/pages/people";
 import { TestSuggestions } from "@/components/test-suggestions";
 import { TestMessage } from "@/components/test-message";
+import ImportData from "@/pages/ImportData";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
             <ProtectedRoute path="/telegram-login" component={TelegramLogin} />
             <ProtectedRoute path="/test-suggestions" component={TestSuggestions} />
             <ProtectedRoute path="/test-message" component={TestMessage} />
+            <ProtectedRoute path="/import-data" component={ImportData} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

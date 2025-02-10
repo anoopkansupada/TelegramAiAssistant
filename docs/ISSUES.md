@@ -1,12 +1,3 @@
-// Wrong
-const [user] = await db.select().from(users).where(eq(users.id, id));
-
-// Correct
-const user = await db.query.users.findFirst({
-  where: eq(users.id, id)
-});
-```
-
 ## Telegram Session Management
 
 ### Issue: Session Persistence
@@ -84,21 +75,44 @@ const user = await db.query.users.findFirst({
    }
    ```
 
-**Remaining Challenges**:
-1. Session Rotation:
-   - Need to implement automatic session rotation for long-lived connections
-   - Should handle graceful migration between sessions
-   - Must maintain connection state during rotation
+**Current Issues and Solutions**:
 
-2. Connection States:
-   - Better state management for different connection phases
-   - Proper handling of disconnection scenarios
-   - Improved logging for debugging connection issues
+1. Schema Definition Issues:
+   ```typescript
+   // Issue: Missing type definition for currentUses in channelInvitations
+   // Solution: Update schema.ts to include proper type
+   export const channelInvitations = pgTable('channel_invitations', {
+     currentUses: integer('current_uses').default(0),
+   });
 
-3. Rate Limiting:
-   - Implement proper flood wait handling
-   - Add request queuing system
-   - Track and respect server-side limits
+   // Issue: Incorrect sorting field in telegramChats
+   // Solution: Add lastMessageAt to schema
+   export const telegramChats = pgTable('telegram_chats', {
+     lastMessageAt: timestamp('last_message_at').defaultNow(),
+   });
+   ```
+
+2. Type Safety Improvements:
+   ```typescript
+   // Issue: Nullable jobTitle in contact info
+   // Solution: Update type definition
+   interface ContactInfo {
+     name: string;
+     jobTitle?: string; // Make explicitly optional
+   }
+   ```
+
+3. Error Code Standardization:
+   ```typescript
+   // Issue: Inconsistent error codes
+   // Solution: Define enum for error codes
+   export enum TelegramErrorCode {
+     AUTH_RESTART = 'AUTH_RESTART',
+     SESSION_EXPIRED = 'SESSION_EXPIRED',
+     PHONE_CODE_EXPIRED = 'PHONE_CODE_EXPIRED',
+     PHONE_CODE_INVALID = 'PHONE_CODE_INVALID',
+   }
+   ```
 
 **Next Steps**:
 1. Implement session rotation

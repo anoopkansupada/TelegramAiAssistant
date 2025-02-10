@@ -73,6 +73,7 @@ Table channelInvitations {
   channelId integer [ref: > telegramChannels.id]
   inviteLink text [not null]
   maxUses integer
+  currentUses integer [default: 0]
   expireDate timestamp
   status text [not null]
   createdById integer [ref: > users.id]
@@ -92,6 +93,7 @@ Table telegramChats {
   category text
   importance integer [default: 0]
   metadata jsonb
+  lastMessageAt timestamp [default: `now()`]
   createdById integer [ref: > users.id]
   createdAt timestamp [default: `now()`]
 }

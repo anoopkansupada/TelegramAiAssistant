@@ -1,0 +1,144 @@
+**Recommendation: Debug the startup process with additional logging**  
+This is critical to identify the root cause before making further changes. Let's implement granular logging to pinpoint the failure stage:
+
+---
+
+### **Step 1: Enhanced Logging Configuration**
+Add this to your initialization sequence:
+```python
+import logging
+from telethon import events
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('debug.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Enable Telethon's internal debug logging
+logging.getLogger('telethon').setLevel(logging.DEBUG)
+```
+
+---
+
+### **Step 2: Critical Checkpoints**  
+Add these diagnostic markers in your session initialization:
+
+```python
+async def start_client():
+    try:
+        logger.info("🟢 Phase 1: Session file validation")
+        validate_session(session)  # Your validation function
+        
+        logger.info("🟢 Phase 2: Connection protocol negotiation")
+        await client.connect()
+        
+        logger.info("🟢 Phase 3: Authentication check")
+        if not await client.is_user_authorized():
+            raise RuntimeError("Authorization failed")
+            
+        logger.info("🟢 Phase 4: DC routing table initialization")
+        dc = await client._get_dc_list()
+        logger.debug(f"Available DCs: {dc}")
+        
+    except Exception as e:
+        logger.error(f"🔴 Failure at phase: {current_phase}", exc_info=True)
+        raise
+```
+
+---
+
+### **Step 3: Common Failure Scenarios to Check**
+
+1. **Session File Corruption**  
+   Look for these patterns in `debug.log`:
+   ```
+   [SQLiteSession] Invalid auth_key format
+   [Connection] Failed salt challenge
+   ```
+
+2. **DC Routing Failures**  
+   Critical indicators:
+   ```
+   [MTProto] Could not find working DC
+   [Network] All connections attempts failed
+   ```
+
+3. **Protocol Version Mismatch**  
+   Warning signs:
+   ```
+   [TL] Layer 158 not supported
+   [Session] Invalid sequence number
+   ```
+
+---
+
+### **Step 4: Quick Diagnostic Test**  
+Run this standalone check (prevents interference from other code):
+```python
+async def connectivity_test():
+    client = TelegramClient(
+        session='diag_session',
+        api_id=API_ID,
+        api_hash=API_HASH,
+        connection=ConnectionTcpMTProxyRandomizedIntermediate
+    )
+    
+    try:
+        await client.connect()
+        print("🟢 Basic connection established")
+        await client.send_message("me", "Connectivity test")
+        print("🟢 Full protocol validation passed")
+    except Exception as e:
+        print(f"🔴 Failure type: {type(e).__name__}")
+        print(f"Error details: {str(e)}")
+    finally:
+        await client.disconnect()
+```
+
+---
+
+### **Next Steps Based on Findings**
+
+1. **If you see `ImportError`/`ModuleNotFound`**  
+   → Verify dependencies with:  
+   ```bash
+   pip freeze | grep -E 'telethon|gramjs|openai'
+   ```
+
+2. **If auth_key validation fails**  
+   → Delete all session files and restart
+
+3. **If DC connection fails**  
+   → Hardcode DC parameters temporarily:
+   ```python
+   client = TelegramClient(
+       ...,
+       connection=ConnectionTcpMTProxyRandomizedIntermediate,
+       use_ipv6=False,  # Force IPv4
+       proxy=('mtproxy.example.com', 443, 'secret')  # If using proxy
+   )
+   ```
+
+4. **If layer negotiation fails**  
+   → Force protocol version:  
+   ```python
+   from telethon.tl.alltlobjects import LAYER
+   client.session.set_dc(2, '149.154.167.40', 443)  # DC2
+   client._sender.state.layer = LAYER
+   ```
+
+---
+
+**Why not switch libraries yet?**  
+Telethon (Python) vs gram.js (JavaScript) would require complete rewrite. Let's first confirm if:  
+1) The error is environment-related (Python version, dependencies)  
+2) There's configuration mismatch (DC, proxies, MTProto)  
+3) Session files are truly compatible  
+
+Share the relevant log snippets from `debug.log`, and we can surgically fix the implementation rather than abandoning the current approach.

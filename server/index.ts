@@ -12,10 +12,23 @@ import { db } from "./db";
 import { neonConfig } from "@neondatabase/serverless";
 import { storage } from "./storage";
 import { sql } from "drizzle-orm";
+import { TelegramPool } from "./telegram/pool";
+import { registerRoutes } from "./routes";
+
+// Configure detailed logging
+const logger = new CustomLogger("[TelegramAuth]", {
+  level: "debug",
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+  handlers: [
+    { type: "file", filename: "debug.log" },
+    { type: "console" }
+  ]
+});
+
+// Enable Telegram's internal debug logging
+logger.debug("Initializing Telegram debug logging");
 
 dotenv.config();
-
-const logger = new CustomLogger("[TelegramAuth]");
 
 // Configure neon to handle WebSocket errors gracefully
 (neonConfig as any).wssClosed = () => {
@@ -32,6 +45,7 @@ const MAX_RETRY_DELAY = 30000; // 30 seconds
 
 async function initializeTelegramClient(attempt = 1): Promise<TelegramClient | null> {
   try {
+    logger.info("🟢 Phase 1: Session file validation");
     const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
     const apiHash = process.env.TELEGRAM_API_HASH || "";
     const phoneNumber = process.env.TELEGRAM_PHONE_NUMBER;
@@ -41,93 +55,36 @@ async function initializeTelegramClient(attempt = 1): Promise<TelegramClient | n
       return null;
     }
 
-    // First try to retrieve existing session
-    const existingSession = await storage.getTelegramSessionByPhone(phoneNumber);
-    if (existingSession?.isActive) {
-      try {
-        const client = new TelegramClient(
-          new StringSession(existingSession.sessionString),
-          apiId,
-          apiHash,
-          {
-            connectionRetries: 3,
-            useWSS: true,
-            maxConcurrentDownloads: 5,
-            deviceModel: "Replit CRM",
-            systemVersion: process.version,
-            appVersion: "1.0.0",
-            useIPV6: false,
-            requestRetries: 3,
-            downloadRetries: 3,
-            retryDelay: 2000,
-            floodSleepThreshold: 60,
-            timeout: 30000
-          }
-        );
-
-        const health = await validateTelegramSession(client);
-        if (health.isValid) {
-          logger.info("Successfully reused existing session", {
-            dcId: health.dcId,
-            layer: health.layer,
-            latency: health.latency
-          });
-          return client;
-        }
-      } catch (error) {
-        logger.warn("Failed to reuse existing session", { error });
-      }
-    }
-
-    // If no valid session exists or reuse failed, create new session
+    // Use the pool to manage connections
+    logger.info("🟢 Phase 2: Connection protocol negotiation");
+    const pool = TelegramPool.getInstance();
     try {
-      const sessionString = await createSessionString({
-        apiId,
-        apiHash,
-        phoneNumber,
-        verificationCode: process.env.TELEGRAM_CODE || "",
-        deviceModel: "Replit CRM",
-        systemVersion: process.version,
-        appVersion: "1.0.0",
-        useWSS: true
-      });
+      // Default admin user ID = 1
+      const client = await pool.getClient(1);
 
-      const client = new TelegramClient(
-        new StringSession(sessionString),
-        apiId,
-        apiHash,
-        {
-          connectionRetries: 3,
-          useWSS: true,
-          maxConcurrentDownloads: 5,
-          deviceModel: "Replit CRM",
-          systemVersion: process.version,
-          appVersion: "1.0.0",
-          useIPV6: false,
-          requestRetries: 3,
-          downloadRetries: 3,
-          retryDelay: 2000,
-          floodSleepThreshold: 60,
-          timeout: 30000
-        }
-      );
-
+      logger.info("🟢 Phase 3: Authentication check");
       const health = await validateTelegramSession(client);
-      if (!health.isValid) {
-        throw new Error(health.error || "Session validation failed");
+
+      if (health.isValid) {
+        logger.info("🟢 Phase 4: DC routing table initialization");
+        logger.info("✅ Successfully connected to Telegram!", {
+          dcId: health.dcId,
+          layer: health.layer,
+          latency: health.latency
+        });
+        return client;
       }
 
-      logger.info("✅ Successfully connected to Telegram!", {
-        dcId: health.dcId,
-        layer: health.layer,
-        latency: health.latency
-      });
-
-      return client;
+      throw new Error(health.error || "Session validation failed");
     } catch (error: any) {
       if (isFloodError(error)) {
         const waitSeconds = extractWaitTime(error);
-        logger.warn(`Rate limited during initialization, attempt ${attempt}/${MAX_RETRY_ATTEMPTS}`, { waitSeconds });
+        logger.warn(`🔴 Rate limited during initialization, attempt ${attempt}/${MAX_RETRY_ATTEMPTS}`, { waitSeconds });
+
+        if (waitSeconds > 3600) { // More than 1 hour
+          logger.warn("Extreme flood wait detected, rotating session");
+          throw error;
+        }
 
         if (attempt < MAX_RETRY_ATTEMPTS) {
           const delayMs = Math.min(
@@ -157,6 +114,8 @@ async function initializeTelegramClient(attempt = 1): Promise<TelegramClient | n
 
 async function startServer() {
   try {
+    logger.info("🟢 Starting server initialization");
+
     // Test database connection
     const result = await db.execute(sql`SELECT 1`);
     if (!result) throw new Error("Database connection failed");
@@ -193,7 +152,7 @@ async function startServer() {
             logLine = logLine.slice(0, 79) + "…";
           }
 
-          log(logLine);
+          logger.debug(logLine);
         }
       });
 
@@ -203,6 +162,7 @@ async function startServer() {
     // Initialize Telegram client with retries and session handling
     await initializeTelegramClient();
 
+    // Initialize and register routes
     const server = await registerRoutes(app);
 
     // Global error handler
@@ -214,18 +174,22 @@ async function startServer() {
       logger.error("Error:", err);
     });
 
-    if (app.get("env") === "development") {
-      await setupVite(app, server);
+    if (process.env.NODE_ENV === "development") {
+      await setupVite(app);
     } else {
       serveStatic(app);
     }
 
-    const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => {
-      log(`serving on port ${PORT}`);
-    });
+    if (!server.listening) {
+      const PORT = process.env.PORT || 5000;
+      server.listen(PORT, () => {
+        logger.info(`🟢 Server started, serving on port ${PORT}`);
+      });
+    }
+
+    return server;
   } catch (error) {
-    logger.error("Failed to start server:", error);
+    logger.error("🔴 Failed to start server:", error);
     if (error instanceof Error) {
       logger.error("Stack trace:", error.stack);
     }
@@ -235,6 +199,6 @@ async function startServer() {
 
 // Start the server
 startServer().catch((error) => {
-  logger.error("Critical error starting server:", error);
+  logger.error("🔴 Critical error starting server:", error);
   process.exit(1);
 });

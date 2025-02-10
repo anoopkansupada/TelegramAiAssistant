@@ -12,6 +12,8 @@ interface ConnectionHealth {
   errors: number;
   lastCheck: Date;
   status: 'healthy' | 'degraded' | 'error';
+  lastFloodWait?: number;
+  dcId?: number;
 }
 
 interface PooledClient {
@@ -25,11 +27,12 @@ interface PooledClient {
 
 export class TelegramPool {
   private static instance: TelegramPool;
-  private clients: Map<number, PooledClient>;
+  private clients: Map<number, PooledClient> = new Map();
   private readonly maxPoolSize: number = 20;
   private readonly healthCheckInterval: number = 60000; // 1 minute
   private readonly maxErrors: number = 3;
   private readonly encryptionKey: Buffer;
+  private readonly MAX_FLOOD_WAIT = 3600; // 1 hour threshold for extreme flood wait
 
   private constructor() {
     this.clients = new Map();
@@ -74,6 +77,9 @@ export class TelegramPool {
   }
 
   private isHealthy(health: ConnectionHealth): boolean {
+    if (health.lastFloodWait && health.lastFloodWait > this.MAX_FLOOD_WAIT) {
+      return false;
+    }
     return health.status === 'healthy' && health.errors < this.maxErrors;
   }
 
@@ -87,7 +93,7 @@ export class TelegramPool {
       throw new Error('No session found for user');
     }
 
-    const decryptedSession = await this.decryptSession(storedSession.session);
+    const decryptedSession = await this.decryptSession(storedSession.sessionString);
     const stringSession = new StringSession(decryptedSession);
 
     const client = new TelegramClient(
@@ -98,34 +104,66 @@ export class TelegramPool {
         connectionRetries: 5,
         useWSS: true,
         maxConcurrentDownloads: 10,
+        deviceModel: "TelegramCRM/1.0",
+        systemVersion: "Linux",
+        appVersion: "1.0.0",
+        floodSleepThreshold: 60,
+        autoReconnect: true,
+        requestRetries: 5,
+        retryDelay: 2000,
+        useIPV6: false,
+        timeout: 30000
       }
     );
 
-    await client.connect();
-    const health: ConnectionHealth = {
-      latency: 0,
-      errors: 0,
-      lastCheck: new Date(),
-      status: 'healthy'
-    };
+    try {
+      await client.connect();
+      // Test connection by getting nearest DC
+      const nearestDc = await client.invoke(new Api.help.GetNearestDc());
 
-    this.clients.set(userId, {
-      client,
-      session: decryptedSession,
-      userId,
-      lastUsed: new Date(),
-      health,
-      connectTime: new Date()
-    });
+      const health: ConnectionHealth = {
+        latency: 0,
+        errors: 0,
+        lastCheck: new Date(),
+        status: 'healthy',
+        dcId: nearestDc.thisDc
+      };
 
-    return client;
+      this.clients.set(userId, {
+        client,
+        session: decryptedSession,
+        userId,
+        lastUsed: new Date(),
+        health,
+        connectTime: new Date()
+      });
+
+      return client;
+    } catch (error: any) {
+      if (error.message?.includes('FLOOD_WAIT_')) {
+        const waitTime = parseInt(error.message.split('_').pop() || '0');
+        logger.warn(`Flood wait during connection: ${waitTime}s`);
+
+        if (waitTime > this.MAX_FLOOD_WAIT) {
+          await this.rotateSession(userId);
+          throw new Error(`Extreme flood wait encountered (${waitTime}s). Session rotated, please retry.`);
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async rotateSession(userId: number) {
+    logger.info(`Rotating session for user ${userId} due to extreme flood wait`);
+    await this.cleanup(userId);
+    await storage.deactivateTelegramSession(userId);
   }
 
   private async cleanupOldConnections() {
     const now = new Date();
     const hour = 60 * 60 * 1000;
-    
-    for (const [userId, client] of this.clients.entries()) {
+
+    for (const [userId, client] of Array.from(this.clients.entries())) {
       if (now.getTime() - client.lastUsed.getTime() > hour) {
         await this.cleanup(userId);
       }
@@ -146,17 +184,32 @@ export class TelegramPool {
 
   private startHealthCheck() {
     setInterval(async () => {
-      for (const [userId, client] of this.clients.entries()) {
+      for (const [userId, client] of Array.from(this.clients.entries())) {
         try {
           const start = Date.now();
-          await client.client.ping();
+          // Instead of ping, use GetNearestDc as a health check
+          await client.client.invoke(new Api.help.GetNearestDc());
           client.health.latency = Date.now() - start;
           client.health.lastCheck = new Date();
           client.health.status = 'healthy';
-        } catch (error) {
-          client.health.errors++;
-          client.health.status = client.health.errors >= this.maxErrors ? 'error' : 'degraded';
-          logger.error(`Health check failed for user ${userId}`, error);
+
+          // Check DC and update if needed
+          const nearestDc = await client.client.invoke(new Api.help.GetNearestDc());
+          if (client.health.dcId !== nearestDc.thisDc) {
+            logger.info(`DC changed for user ${userId}: ${client.health.dcId} -> ${nearestDc.thisDc}`);
+            client.health.dcId = nearestDc.thisDc;
+          }
+        } catch (error: any) {
+          if (error.message?.includes('FLOOD_WAIT_')) {
+            const waitTime = parseInt(error.message.split('_').pop() || '0');
+            client.health.lastFloodWait = waitTime;
+            client.health.status = waitTime > this.MAX_FLOOD_WAIT ? 'error' : 'degraded';
+            logger.warn(`Flood wait during health check for user ${userId}: ${waitTime}s`);
+          } else {
+            client.health.errors++;
+            client.health.status = client.health.errors >= this.maxErrors ? 'error' : 'degraded';
+            logger.error(`Health check failed for user ${userId}`, error);
+          }
 
           if (client.health.status === 'error') {
             await this.cleanup(userId);
@@ -177,13 +230,14 @@ export class TelegramPool {
       averageLatency: 0
     };
 
-    if (this.clients.size > 0) {
+    const clients = Array.from(this.clients.values());
+    if (clients.length > 0) {
       let totalLatency = 0;
-      for (const client of this.clients.values()) {
+      for (const client of clients) {
         status.totalErrors += client.health.errors;
         totalLatency += client.health.latency;
       }
-      status.averageLatency = totalLatency / this.clients.size;
+      status.averageLatency = totalLatency / clients.length;
     }
 
     return status;

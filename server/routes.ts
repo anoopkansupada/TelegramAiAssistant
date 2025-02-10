@@ -12,6 +12,7 @@ import { requireTelegramAuth } from "./middleware/telegramAuth";
 import { CustomLogger } from "./utils/logger";
 import { requestVerificationCode, verifyCode, verify2FA } from "./telegram/auth";
 import { errorHandler, ErrorType } from "./utils/errors";
+import { importTelegramData } from './utils/dataImport';
 
 const logger = new CustomLogger("[Routes]");
 
@@ -416,6 +417,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ otpauth_url: secret.otpauth_url });
     } catch (error: any) {
       logger.error("[Route] Error in 2FA setup:", error);
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
+    }
+  });
+
+  app.post("/api/import-telegram-data", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      await importTelegramData(req.session.userId);
+      res.json({ success: true, message: "Telegram data import completed successfully" });
+    } catch (error: any) {
+      logger.error("[Route] Error importing Telegram data:", error);
       const problem = errorHandler(error);
       res.status(problem.status).json(problem);
     }

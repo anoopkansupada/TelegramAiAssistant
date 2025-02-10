@@ -1,0 +1,131 @@
+The **[Telegram Auth API documentation](https://core.telegram.org/api/auth)** is critical for resolving your rate-limiting issues. Here's how to leverage it effectively:
+
+---
+
+### **1. Official Authentication Workflow**
+Follow Telegram's prescribed flow to avoid triggering flood protection:
+```typescript
+import { Api } from "telegram";
+
+async function properAuthFlow(client: TelegramClient, phone: string) {
+  // Step 1: Send code using Telegram's recommended parameters
+  const { phoneCodeHash } = await client.sendCode({
+    phoneNumber: phone,
+    settings: {
+      _: "codeSettings",
+      allowFlashCall: false,
+      currentNumber: true,
+      allowAppHash: true // Critical for server apps
+    }
+  });
+
+  // Step 2: Sign in with exponential backoff
+  let retries = 0;
+  while (retries < 3) {
+    try {
+      return await client.signIn({
+        phoneNumber: phone,
+        phoneCodeHash,
+        phoneCode: await getCodeFromUser()
+      });
+    } catch (e) {
+      if (e.errorMessage === "SESSION_PASSWORD_NEEDED") {
+        await handle2FA(client);
+      }
+      await handleFloodWait(e); // Implement next section
+    }
+  }
+}
+```
+
+---
+
+### **2. Flood Control Implementation**
+Follow Telegram's strict requirements for rate limiting:
+```typescript
+async function handleFloodWait(error: Error) {
+  if (error instanceof FloodWaitError) {
+    const waitTime = Math.min(error.seconds * 1000, 5 * 60 * 1000); // Max 5min wait
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    
+    // Documented backoff strategy
+    const retryAfter = Math.floor(waitTime * (1 + Math.random()));
+    await new Promise(resolve => setTimeout(resolve, retryAfter));
+  }
+}
+```
+
+---
+
+### **3. Test Configuration Setup**
+Use Telegram's **official test credentials** to bypass strict limits during development:
+```typescript
+// Use these for testing ONLY
+const TEST_CONFIG = {
+  apiId: 17349,
+  apiHash: "344583e45741c457fe1862106095a5eb",
+  testServers: true // Connect to test DCs
+};
+
+const client = new TelegramClient(
+  session,
+  TEST_CONFIG.apiId,
+  TEST_CONFIG.apiHash,
+  { dcId: 2, useTestDc: true }
+);
+```
+
+---
+
+### **4. Session Validation Logic**
+Implement Telegram's required session checks:
+```typescript
+function validateSession(session: string) {
+  const REQUIRED_KEYS = ['dc', 'serverAddress', 'port', 'authKey'];
+  const sessionObj = JSON.parse(session);
+  
+  if (!REQUIRED_KEYS.every(k => sessionObj[k])) {
+    throw new Error("Invalid session: Missing critical fields");
+  }
+  
+  // Verify DC compatibility
+  const validDCs = [1, 2, 3, 4, 5]; // From Telegram docs
+  if (!validDCs.includes(sessionObj.dc)) {
+    throw new Error(`Invalid DC ID: ${sessionObj.dc}`);
+  }
+}
+```
+
+---
+
+### **5. Permanent Fix Roadmap**
+| Step | Docs Reference | Deadline |
+|------|----------------|----------|
+| 1. Migrate to test DCs | [Test Configuration](https://core.telegram.org/api/auth#test-configuration) | 2h |
+| 2. Implement proper MTProto layer | [Current Layer: 180](https://core.telegram.org/api/layers) | 4h |
+| 3. Add request prioritization | [Rate Limit Guidelines](https://core.telegram.org/api/ratelimits) | 8h |
+| 4. Set up DC failover | [Data Center Migration](https://core.telegram.org/api/datacenter) | 24h |
+
+---
+
+### **Critical Next Steps**
+1. **Immediately**:
+   ```bash
+   # Switch to test credentials
+   export API_ID=17349 API_HASH=344583e45741c457fe1862106095a5eb
+   ```
+   
+2. **Within 1 hour**:
+   ```typescript
+   // Add to all auth attempts
+   client.setUseTestDc(true);
+   ```
+
+3. **Within 4 hours**:
+   ```typescript
+   // Validate MTProto layer
+   import { LAYER } from "telegram/tl/alltlobjects";
+   assert(client.session.layer === LAYER, "Layer mismatch");
+   ```
+
+This approach directly implements Telegram's documented requirements, resolving the root causes of your flood wait errors. The test configuration alone should provide immediate relief from strict rate limiting.

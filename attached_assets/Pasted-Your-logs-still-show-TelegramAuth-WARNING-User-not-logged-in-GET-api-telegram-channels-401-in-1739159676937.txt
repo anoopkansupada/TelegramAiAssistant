@@ -1,0 +1,103 @@
+Your logs still show:
+
+[TelegramAuth] [WARNING] User not logged in
+GET /api/telegram-channels 401 in 18ms :: {"message":"Authentication required"}
+
+This means the Telegram session is not being established.
+
+✅ Fix Telegram Authentication
+
+Follow these steps exactly to troubleshoot and resolve the issue.
+
+1️⃣ Confirm the Telegram Session File Exists
+
+Run this in your Replit terminal:
+
+ls -la | grep telegram
+
+	•	If you see telegram.session.json or a similar file, authentication might be failing for another reason.
+	•	If the file is missing, authentication never succeeded.
+
+2️⃣ Manually Authenticate with Telegram
+
+Run:
+
+npx gramjs-cli
+
+Then:
+	1.	Enter your Telegram phone number.
+	2.	Enter the OTP sent to Telegram.
+	3.	If prompted, enter your 2FA password.
+
+Once successful, a session file should be created.
+
+3️⃣ Restart the Server
+
+Run:
+
+npx tsx server/index.ts
+
+Now check if the Telegram session warning disappears.
+
+4️⃣ Debug If Still Not Working
+
+🔍 Check If the Session File Exists Again
+
+Run:
+
+ls -la | grep telegram
+
+	•	If it exists, but authentication still fails, the code is not loading the session properly.
+
+🔍 Manually Load the Session in Your Code
+
+Edit your server/index.ts (or wherever Telegram authentication is handled) and modify the authentication logic:
+
+import { TelegramClient } from "telegram";
+import { StringSession } from "telegram/sessions";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const sessionString = process.env.TELEGRAM_SESSION || "";
+const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+const apiHash = process.env.TELEGRAM_API_HASH || "";
+
+const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
+    connectionRetries: 5,
+});
+
+(async () => {
+    try {
+        await client.start();
+        console.log("[TelegramAuth] ✅ Successfully logged into Telegram!");
+    } catch (error) {
+        console.error("[TelegramAuth] ❌ Error logging into Telegram:", error);
+    }
+})();
+
+5️⃣ If You Need to Reset the Session
+
+If nothing works, clear old sessions and start fresh:
+	1.	Delete the session file:
+
+rm telegram.session.json
+
+
+	2.	Restart authentication:
+
+npx gramjs-cli
+
+
+	3.	Restart the server:
+
+npx tsx server/index.ts
+
+🚀 Next Steps
+	1.	Check if the session file exists (ls -la | grep telegram).
+	2.	Manually authenticate with npx gramjs-cli.
+	3.	Restart the server (npx tsx server/index.ts).
+	4.	If still failing, modify the authentication code to manually load the session.
+	5.	If necessary, reset everything and re-authenticate.
+
+Try this and let me know what happens! 🚀

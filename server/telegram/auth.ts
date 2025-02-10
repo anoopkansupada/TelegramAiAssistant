@@ -3,6 +3,8 @@ import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { CustomLogger } from "../utils/logger";
 import { APIError } from "../utils/errors";
+import { computeCheck } from "telegram/Password";
+import bigInt from "big-integer";
 
 const logger = new CustomLogger("[TelegramAuth]");
 
@@ -30,9 +32,6 @@ export class TelegramAuthenticationError extends Error {
   }
 }
 
-/**
- * Request a verification code for the provided phone number
- */
 export async function requestVerificationCode(phoneNumber: string): Promise<{ phoneCodeHash: string }> {
   logger.info('Requesting verification code', { phoneNumber });
 
@@ -44,7 +43,10 @@ export async function requestVerificationCode(phoneNumber: string): Promise<{ ph
     {
       connectionRetries: 5,
       useWSS: true,
-      maxConcurrentDownloads: 10
+      maxConcurrentDownloads: 10,
+      deviceModel: "Telegram Web",
+      systemVersion: "Chrome",
+      appVersion: "1.0.0"
     }
   );
 
@@ -61,8 +63,10 @@ export async function requestVerificationCode(phoneNumber: string): Promise<{ ph
       })
     }));
 
+    // Type assertion since we know the structure
+    const phoneCodeHash = (result as any).phoneCodeHash as string;
     logger.info('Verification code sent successfully', { phoneNumber });
-    return { phoneCodeHash: result.phoneCodeHash as string };
+    return { phoneCodeHash };
   } catch (error: any) {
     logger.error('Failed to request verification code', error);
     throw APIError.fromTelegramError(error);
@@ -71,9 +75,6 @@ export async function requestVerificationCode(phoneNumber: string): Promise<{ ph
   }
 }
 
-/**
- * Verify the provided code and create a new session
- */
 export async function verifyCode(
   phoneNumber: string,
   code: string,
@@ -89,28 +90,29 @@ export async function verifyCode(
     {
       connectionRetries: 5,
       useWSS: true,
-      maxConcurrentDownloads: 10
+      maxConcurrentDownloads: 10,
+      deviceModel: "Telegram Web",
+      systemVersion: "Chrome",
+      appVersion: "1.0.0"
     }
   );
 
   try {
     await client.connect();
 
-    // Sign in with the provided code
-    const signInResult = await client.signIn({
-      phoneNumber,
+    const signInResult = await client.invoke(new Api.auth.SignIn({
+      phoneNumber: phoneNumber,
       phoneCode: code,
-      phoneCodeHash
-    });
+      phoneCodeHash: phoneCodeHash
+    }));
 
-    if ('signUp' in signInResult && signInResult.signUp) {
+    if ((signInResult as any)._ === 'auth.authorizationSignUpRequired') {
       throw new TelegramAuthenticationError(
         TelegramAuthError.INVALID_CREDENTIALS,
         'Sign up required'
       );
     }
 
-    // Get the session string for storage
     const session = client.session.save() as unknown as string;
     logger.info('Code verified successfully', { phoneNumber });
 
@@ -123,9 +125,6 @@ export async function verifyCode(
   }
 }
 
-/**
- * Verify 2FA password if required
- */
 export async function verify2FA(
   password: string,
   session: string
@@ -140,20 +139,31 @@ export async function verify2FA(
     {
       connectionRetries: 5,
       useWSS: true,
-      maxConcurrentDownloads: 10
+      maxConcurrentDownloads: 10,
+      deviceModel: "Telegram Web",
+      systemVersion: "Chrome",
+      appVersion: "1.0.0"
     }
   );
 
   try {
     await client.connect();
-    const result = await client.checkPassword(password);
 
-    if (!result) {
-      throw new TelegramAuthenticationError(
-        TelegramAuthError.PASSWORD_INVALID,
-        'Invalid 2FA password'
-      );
-    }
+    const passwordInfo = await client.invoke(new Api.account.GetPassword());
+    const { A, M1 } = await computeCheck(passwordInfo, password);
+
+    const srpId = passwordInfo.srpId ? 
+      bigInt(passwordInfo.srpId.toString()) : 
+      undefined;
+
+    await client.invoke(new Api.auth.CheckPassword({
+      password: {
+        className: "InputCheckPasswordSRP",
+        srpId: srpId || bigInt(0), // Use 0 as fallback if srpId is undefined
+        A: Buffer.from(A),
+        M1: Buffer.from(M1)
+      }
+    }));
 
     logger.info('2FA password verified successfully');
   } catch (error: any) {

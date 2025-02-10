@@ -314,7 +314,8 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
 });
 
-export const insertCompanySchema = createInsertSchema(companies).extend({
+// Fix the company schema insert validation
+export const insertCompanySchema = createInsertSchema(companies).pick({
   name: true,
   legalName: true,
   industry: true,
@@ -354,6 +355,8 @@ export const insertCompanySchema = createInsertSchema(companies).extend({
   customFields: true,
   documents: true,
   notes: true,
+  createdById: true,
+}).extend({
   knowledgeHub: z.object({
     documents: z.array(z.any()),
     categories: z.array(z.string()),

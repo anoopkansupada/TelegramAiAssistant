@@ -1,21 +1,3 @@
-// Secure session storage implementation
-class SecureSessionStorage {
-  async store(session: string): Promise<void> {
-    const encrypted = await this.encrypt(session);
-    await db.update(telegramSessions)
-      .set({ session: encrypted })
-      .where(eq(telegramSessions.id, sessionId));
-  }
-
-  async retrieve(): Promise<string | null> {
-    const session = await db.query.telegramSessions.findFirst({
-      where: eq(telegramSessions.isActive, true)
-    });
-    return session ? await this.decrypt(session.session) : null;
-  }
-}
-```
-
 ### Connection Management
 ```typescript
 class TelegramConnectionManager {

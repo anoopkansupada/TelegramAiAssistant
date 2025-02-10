@@ -2,9 +2,33 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { CustomLogger } from "../utils/logger";
-import { storage } from "../storage";
+import { APIError } from "../utils/errors";
 
 const logger = new CustomLogger("[TelegramAuth]");
+
+export enum TelegramAuthError {
+  INVALID_CREDENTIALS = 'TELEGRAM_INVALID_CREDENTIALS',
+  PHONE_NUMBER_INVALID = 'TELEGRAM_PHONE_NUMBER_INVALID',
+  PHONE_NUMBER_FLOOD = 'TELEGRAM_PHONE_NUMBER_FLOOD',
+  CODE_EXPIRED = 'TELEGRAM_CODE_EXPIRED',
+  CODE_INVALID = 'TELEGRAM_CODE_INVALID',
+  PASSWORD_INVALID = 'TELEGRAM_PASSWORD_INVALID',
+  SESSION_EXPIRED = 'TELEGRAM_SESSION_EXPIRED',
+  API_ID_INVALID = 'TELEGRAM_API_ID_INVALID',
+  CONNECTION_ERROR = 'TELEGRAM_CONNECTION_ERROR',
+  PHONE_CODE_INVALID = 'TELEGRAM_PHONE_CODE_INVALID'
+}
+
+export class TelegramAuthenticationError extends Error {
+  constructor(
+    public code: TelegramAuthError,
+    message: string,
+    public statusCode: number = 400
+  ) {
+    super(message);
+    this.name = 'TelegramAuthenticationError';
+  }
+}
 
 /**
  * Request a verification code for the provided phone number
@@ -34,9 +58,9 @@ export async function requestVerificationCode(phoneNumber: string): Promise<{ ph
 
     logger.info('Verification code sent successfully', { phoneNumber });
     return { phoneCodeHash: result.phoneCodeHash };
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Failed to request verification code', error);
-    throw error;
+    throw APIError.fromTelegramError(error);
   } finally {
     await client.disconnect();
   }
@@ -78,12 +102,9 @@ export async function verifyCode(
     logger.info('Code verified successfully', { phoneNumber });
 
     return session;
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Failed to verify code', error);
-    if (error instanceof Error && error.message.includes('PHONE_CODE_INVALID')) {
-      throw new Error('PHONE_CODE_INVALID');
-    }
-    throw error;
+    throw APIError.fromTelegramError(error);
   } finally {
     await client.disconnect();
   }
@@ -102,8 +123,8 @@ export async function verify2FA(
     const result = await client.checkPassword(password);
     logger.info('2FA password verified successfully');
     return result;
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Failed to verify 2FA password', error);
-    throw error;
+    throw APIError.fromTelegramError(error);
   }
 }

@@ -11,6 +11,7 @@ import { generateResponseSuggestions } from "./aiSuggestions";
 import { requireTelegramAuth } from "./middleware/telegramAuth";
 import { CustomLogger } from "./utils/logger";
 import { requestVerificationCode, verifyCode, verify2FA } from "./telegram/auth";
+import { errorHandler, ErrorType } from "./utils/errors";
 
 const logger = new CustomLogger("[Routes]");
 
@@ -64,7 +65,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { phoneNumber } = req.body;
       if (!phoneNumber) {
-        return res.status(400).json({ message: "Phone number is required" });
+        return res.status(400).json({
+          type: ErrorType.VALIDATION_ERROR,
+          title: "Validation Error",
+          status: 400,
+          detail: "Phone number is required"
+        });
       }
 
       if (req.session.userId) {
@@ -103,31 +109,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       logger.error('Error requesting verification code', error);
-
-      if (error.message?.includes('PHONE_NUMBER_INVALID')) {
-        return res.status(400).json({
-          message: "Invalid phone number format",
-          code: "PHONE_NUMBER_INVALID"
-        });
-      }
-
-      if (error.message?.includes('PHONE_NUMBER_FLOOD')) {
-        return res.status(429).json({
-          message: "Too many attempts. Please try again later",
-          code: "PHONE_NUMBER_FLOOD"
-        });
-      }
-
-      if (error.message?.includes('AUTH_RESTART')) {
-        return res.status(500).json({
-          message: "Please try requesting the code again",
-          code: "AUTH_RESTART"
-        });
-      }
-
-      res.status(500).json({
-        message: error.message || "Failed to send verification code"
-      });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 
@@ -169,7 +152,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "Invalid 2FA code." });
     } catch (error: any) {
       logger.error("[Route] Error in 2FA verification:", error);
-      res.status(500).json({ message: "Failed to verify 2FA code" });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 
@@ -211,44 +195,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       logger.error("[Route] Error verifying code:", error);
-
-      if (error.message === 'PHONE_CODE_INVALID') {
-        return res.status(400).json({
-          message: "Invalid verification code. Please try again.",
-          code: "PHONE_CODE_INVALID"
-        });
-      }
-
-      res.status(500).json({
-        message: error.message || "Failed to verify code"
-      });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 
   app.get("/api/contacts", async (req, res) => {
-    const contacts = await storage.listContacts();
-    res.json(contacts);
+    try {
+      const contacts = await storage.listContacts();
+      res.json(contacts);
+    } catch (error: any) {
+      logger.error("[Route] Error getting contacts:", error);
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
+    }
   });
 
   app.post("/api/contacts", async (req, res) => {
-    const contact = await storage.createContact({
-      ...req.body,
-      createdById: req.user!.id,
-    });
-    res.status(201).json(contact);
+    try {
+      const contact = await storage.createContact({
+        ...req.body,
+        createdById: req.user!.id,
+      });
+      res.status(201).json(contact);
+    } catch (error: any) {
+      logger.error("[Route] Error creating contact:", error);
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
+    }
   });
 
   app.get("/api/companies", async (req, res) => {
-    const companies = await storage.listCompanies();
-    res.json(companies);
+    try {
+      const companies = await storage.listCompanies();
+      res.json(companies);
+    } catch (error: any) {
+      logger.error("[Route] Error getting companies:", error);
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
+    }
   });
 
   app.post("/api/companies", async (req, res) => {
-    const company = await storage.createCompany({
-      ...req.body,
-      createdById: req.user!.id,
-    });
-    res.status(201).json(company);
+    try {
+      const company = await storage.createCompany({
+        ...req.body,
+        createdById: req.user!.id,
+      });
+      res.status(201).json(company);
+    } catch (error: any) {
+      logger.error("[Route] Error creating company:", error);
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
+    }
   });
 
   app.get("/api/telegram-channels", requireTelegramAuth, async (req, res) => {
@@ -284,7 +283,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(channels);
     } catch (error) {
       logger.error('Failed to list channels', error);
-      res.status(500).json({ message: "Failed to list channels" });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 
@@ -347,10 +347,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stack: error.stack,
         body: req.body
       });
-      res.status(500).json({ 
-        message: "Failed to process test message",
-        error: error.message 
-      });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 
@@ -392,7 +390,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await clientManager.cleanupClient(req.session.userId.toString());
       }
       req.session.telegramSession = undefined;
-      res.json({ connected: false });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 
@@ -417,7 +416,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ otpauth_url: secret.otpauth_url });
     } catch (error: any) {
       logger.error("[Route] Error in 2FA setup:", error);
-      res.status(500).json({ message: "Failed to set up 2FA" });
+      const problem = errorHandler(error);
+      res.status(problem.status).json(problem);
     }
   });
 

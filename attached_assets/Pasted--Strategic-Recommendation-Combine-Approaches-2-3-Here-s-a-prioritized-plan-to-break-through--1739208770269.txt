@@ -1,0 +1,112 @@
+**Strategic Recommendation: Combine Approaches 2 & 3**  
+Here's a prioritized plan to break through these blockers:
+
+---
+
+### **1. Immediate Session Injection (Bypass Flood Limit)**  
+**Step 1**: Generate a pre-authorized session string locally:  
+```bash
+# Run in a clean environment
+npm run init:telegram -- --inject-session
+```
+
+**Step 2**: Set as environment variable to bypass interactive auth:  
+```bash
+export TELEGRAM_SESSION="1aa2bb3cc..."  # Your generated string
+```
+
+**Step 3**: Modify session initialization to use this:  
+```typescript
+// server/telegram/pool.ts
+if (process.env.TELEGRAM_SESSION) {
+  client.session = new StringSession(process.env.TELEGRAM_SESSION);
+  await client.connect(); // Skip phone auth
+} else {
+  // Existing interactive flow
+}
+```
+
+---
+
+### **2. Build Directory Hotfix**  
+Temporarily symlink while fixing configs:  
+```bash
+ln -s /home/runner/workspace/dist/public /home/runner/workspace/server/public
+```
+
+Add validation check:  
+```typescript
+// server/vite.ts
+if (!fs.existsSync(buildPath)) {
+  console.error("🛑 CRITICAL: Missing client build");
+  console.log("Run these commands:");
+  console.log("1. npm run build:client");
+  console.log("2. mkdir -p server/public && cp -R dist/public/* server/public/");
+  process.exit(1);
+}
+```
+
+---
+
+### **3. Flood Mitigation Protocol**  
+While waiting for the 12-hour limit to expire:  
+```typescript
+// Implement aggressive rate control
+class FloodArmor {
+  private lastRequest = 0;
+  private requestQueue: Array<() => Promise<void>> = [];
+  
+  async execute(request: () => Promise<any>) {
+    const delay = Date.now() - this.lastRequest;
+    if (delay < 2000) { // 2s between requests
+      await new Promise(resolve => 
+        setTimeout(resolve, 2000 - delay)
+      );
+    }
+    
+    try {
+      return await request();
+    } catch (e) {
+      if (e instanceof FloodWaitError) {
+        console.error(`🚨 Flood wait triggered: ${e.seconds}s`);
+        await this.rotateDc();
+      }
+    }
+  }
+
+  private async rotateDc() {
+    // Implement DC rotation logic
+  }
+}
+```
+
+---
+
+### **Implementation Roadmap**  
+1. **Immediate (5 mins)**:  
+   - Inject pre-authorized session  
+   - Create symlink for build dir  
+
+2. **Short-Term (30 mins)**:  
+   - Implement flood armor class  
+   - Fix Vite config paths permanently  
+
+3. **Long-Term (Post-Rate Limit)**:  
+   - Set up proper session rotation  
+   - Configure CI/CD build chain  
+
+---
+
+**Why This Works**:  
+1. Bypasses current flood limit using existing session  
+2. Maintains development velocity with build dir workaround  
+3. Prevents future floods with request throttling  
+
+**Critical Next Step**:  
+```bash
+# Run after implementing
+TELEGRAM_SESSION="your_session_string" \
+npm run build:client && npm start
+```
+
+Share any new errors from this execution, and we'll refine further.

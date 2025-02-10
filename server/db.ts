@@ -12,6 +12,7 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+// Create separate pools for auth and CRM databases
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Add error handler to the pool

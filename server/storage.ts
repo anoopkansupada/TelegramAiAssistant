@@ -27,12 +27,15 @@ export class DatabaseStorage {
     setInterval(() => this.cleanupExpiredSessions(), 24 * 60 * 60 * 1000);
   }
 
-  // Auth
+  // Auth operations with error handling
   async getUser(id: number): Promise<User | undefined> {
     try {
-      return await db.query.users.findFirst({
-        where: eq(users.id, id)
-      });
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, id))
+        .execute();
+      return user;
     } catch (error) {
       console.error('Error in getUser:', error);
       throw error;
@@ -41,9 +44,12 @@ export class DatabaseStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     try {
-      return await db.query.users.findFirst({
-        where: eq(users.username, username)
-      });
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username))
+        .execute();
+      return user;
     } catch (error) {
       console.error('Error in getUserByUsername:', error);
       throw error;
@@ -52,10 +58,29 @@ export class DatabaseStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     try {
-      const [user] = await db.insert(users).values(insertUser).returning();
+      const [user] = await db
+        .insert(users)
+        .values(insertUser)
+        .returning()
+        .execute();
       return user;
     } catch (error) {
       console.error('Error in createUser:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User> {
+    try {
+      const [user] = await db
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, id))
+        .returning()
+        .execute();
+      return user;
+    } catch (error) {
+      console.error('Error in updateUser:', error);
       throw error;
     }
   }
@@ -600,18 +625,6 @@ export class DatabaseStorage {
     }
   }
 
-  async updateUser(user: User): Promise<User> {
-    try {
-      const [updatedUser] = await db.update(users)
-        .set(user)
-        .where(eq(users.id, user.id))
-        .returning();
-      return updatedUser;
-    } catch (error) {
-      console.error('Error in updateUser:', error);
-      throw error;
-    }
-  }
 
   async getRecentMessages(contactId: number, limit: number): Promise<Message[]> {
     try {

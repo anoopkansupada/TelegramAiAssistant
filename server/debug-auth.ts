@@ -46,13 +46,17 @@ export async function completeAuthentication(code: string) {
             throw new Error("Missing Telegram API credentials");
         }
 
-        // Create session string using the new utility
-        const sessionString = await createSessionString(
+        // Create session string using the updated config interface
+        const sessionString = await createSessionString({
             phoneNumber,
             apiId,
             apiHash,
-            code
-        );
+            verificationCode: code,
+            deviceModel: "TelegramCRM",
+            systemVersion: "1.0.0",
+            appVersion: "1.0.0",
+            useWSS: true
+        });
 
         // Save to database
         await storage.createTelegramSession({

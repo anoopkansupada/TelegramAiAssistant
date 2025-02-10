@@ -2,47 +2,22 @@ import { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
 import { clientManager } from '../userbot-client';
 import { CustomLogger } from '../utils/logger';
-import { TelegramClient } from 'telegram';
-import { StringSession } from 'telegram/sessions';
 
 const logger = new CustomLogger('[TelegramAuth]');
-const MAX_RETRIES = 3;
-const CONNECTION_TIMEOUT = 5000;
 
 async function attemptSessionRecovery(userId: number): Promise<boolean> {
   try {
     logger.info('Attempting session recovery', { userId });
 
-    // Get session from database
     const telegramSession = await storage.getTelegramSession(userId);
     if (!telegramSession) {
       logger.warn('No session found in database');
       return false;
     }
 
-    // Validate environment variables
-    const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
-    const apiHash = process.env.TELEGRAM_API_HASH || "";
-
-    if (!apiId || !apiHash) {
-      logger.error('Missing Telegram API credentials');
-      return false;
-    }
-
     try {
-      const client = new TelegramClient(
-        new StringSession(telegramSession.sessionString),
-        apiId,
-        apiHash,
-        {
-          connectionRetries: MAX_RETRIES,
-          useWSS: true,
-          timeout: CONNECTION_TIMEOUT,
-          retryDelay: 1000
-        }
-      );
-
-      await client.connect();
+      // Use the improved client manager to attempt connection
+      const client = await clientManager.getClient(userId);
       const me = await client.getMe();
 
       if (me) {
@@ -151,9 +126,9 @@ export async function requireTelegramAuth(
 
       const recovered = await attemptSessionRecovery(req.session.userId);
       if (!recovered) {
-        await clientManager.cleanupClient(req.session.userId.toString());
+        await clientManager.disconnectClient(req.session.userId);
         return res.status(401).json({
-          message: 'Telegram session invalid, please re-authenticate',
+          message: 'Telegram session invalid, please re-authenticate', 
           code: 'TELEGRAM_AUTH_FAILED'
         });
       }

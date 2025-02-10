@@ -1,36 +1,62 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
-import { Api } from "telegram/tl";
 import { CustomLogger } from "./utils/logger";
 import { storage } from "./storage";
-import * as crypto from 'crypto';
+import { EventEmitter } from "events";
 
 const logger = new CustomLogger("[UserBot]");
 
-interface ConnectionMetrics {
-  latency: number;
-  errors: number;
-  lastUsed: Date;
+// Connection state events
+const Events = {
+  CONNECTED: 'connected',
+  DISCONNECTED: 'disconnected',
+  ERROR: 'error',
+  RECONNECTING: 'reconnecting',
+  RATE_LIMITED: 'rate_limited'
+} as const;
+
+interface ClientConfig {
+  connectionRetries: number;
+  retryDelay: number;
+  maxConcurrentDownloads: number;
+  deviceModel: string;
+  systemVersion: string;
+  appVersion: string;
+  useWSS: boolean;
+  timeout?: number;
+  floodSleepThreshold?: number;
 }
 
-class TelegramPool {
-  private static instance: TelegramPool;
-  private clients: Map<number, {
-    client: TelegramClient;
-    metrics: ConnectionMetrics;
-  }>;
-  private maxPoolSize: number = 10;
-  private connectionTimeout: number = 30000; // 30 seconds
+class TelegramClientManager extends EventEmitter {
+  private static instance: TelegramClientManager;
+  private clients: Map<number, TelegramClient>;
+  private connecting: Set<number>;
+  private rateLimitedUsers: Map<number, number>; // userId -> retry after timestamp
+  private config: ClientConfig;
 
   private constructor() {
+    super();
     this.clients = new Map();
+    this.connecting = new Set();
+    this.rateLimitedUsers = new Map();
+    this.config = {
+      connectionRetries: 5,
+      retryDelay: 1000,
+      maxConcurrentDownloads: 10,
+      deviceModel: "TelegramCRM",
+      systemVersion: "1.0.0",
+      appVersion: "1.0.0",
+      useWSS: true,
+      timeout: 30000,
+      floodSleepThreshold: 60 // seconds to wait before retry on flood wait
+    };
   }
 
-  public static getInstance(): TelegramPool {
-    if (!TelegramPool.instance) {
-      TelegramPool.instance = new TelegramPool();
+  public static getInstance(): TelegramClientManager {
+    if (!TelegramClientManager.instance) {
+      TelegramClientManager.instance = new TelegramClientManager();
     }
-    return TelegramPool.instance;
+    return TelegramClientManager.instance;
   }
 
   private async createClient(userId: number): Promise<TelegramClient> {
@@ -51,149 +77,161 @@ class TelegramPool {
       apiId,
       apiHash,
       {
-        connectionRetries: 5,
-        useWSS: true,
-        maxConcurrentDownloads: 10,
-        deviceModel: "Replit CRM",
-        systemVersion: "1.0.0",
-        appVersion: "1.0.0",
-        retryDelay: 1000
+        ...this.config,
+        connectionRetries: 1, // We handle retries ourselves
+        autoReconnect: false // We handle reconnection
       }
     );
 
+    return client;
+  }
+
+  public async getClient(userId: number): Promise<TelegramClient> {
+    // Check rate limits first
+    const rateLimitUntil = this.rateLimitedUsers.get(userId);
+    if (rateLimitUntil && rateLimitUntil > Date.now()) {
+      const waitSeconds = Math.ceil((rateLimitUntil - Date.now()) / 1000);
+      throw new Error(`Rate limited. Please wait ${waitSeconds} seconds`);
+    }
+
+    // Return existing connected client
+    const existingClient = this.clients.get(userId);
+    if (existingClient) {
+      try {
+        await existingClient.getMe();
+        return existingClient;
+      } catch (error) {
+        await this.disconnectClient(userId);
+      }
+    }
+
+    // Prevent multiple simultaneous connection attempts
+    if (this.connecting.has(userId)) {
+      throw new Error("Connection already in progress");
+    }
+
+    this.connecting.add(userId);
+
+    try {
+      const client = await this.createClient(userId);
+      await this.connectWithRetry(client, userId);
+
+      this.clients.set(userId, client);
+      this.emit(Events.CONNECTED, userId);
+
+      return client;
+    } finally {
+      this.connecting.delete(userId);
+    }
+  }
+
+  private async connectWithRetry(client: TelegramClient, userId: number, attempt = 1): Promise<void> {
     try {
       await client.connect();
       const me = await client.getMe();
+
       if (!me) {
         throw new Error("Failed to get user info after connection");
       }
 
       // Update session last used timestamp
-      await storage.updateTelegramSession(session.id, {
-        lastUsed: new Date(),
-        isActive: true,
-        retryCount: 0
-      });
+      const session = await storage.getTelegramSession(userId);
+      if (session) {
+        await storage.updateTelegramSession(session.id, {
+          lastUsed: new Date(),
+          isActive: true,
+          retryCount: 0
+        });
+      }
 
-      return client;
-    } catch (error) {
-      await client.disconnect();
+      // Clear rate limit if connection successful
+      this.rateLimitedUsers.delete(userId);
+
+    } catch (error: any) {
+      logger.error(`Connection attempt ${attempt} failed`, { error: error.message, userId });
+
+      // Handle rate limiting
+      if (error.code === 420) { // FLOOD_WAIT
+        const waitSeconds = error.seconds || this.config.floodSleepThreshold;
+        const retryAfter = Date.now() + (waitSeconds * 1000);
+
+        this.rateLimitedUsers.set(userId, retryAfter);
+        this.emit(Events.RATE_LIMITED, { userId, waitSeconds });
+
+        throw error;
+      }
+
+      if (attempt < this.config.connectionRetries) {
+        this.emit(Events.RECONNECTING, { userId, attempt });
+        await new Promise(resolve => setTimeout(resolve, this.config.retryDelay * Math.pow(2, attempt - 1)));
+        return this.connectWithRetry(client, userId, attempt + 1);
+      }
+
       throw error;
     }
   }
 
-  public async getClient(userId: number): Promise<TelegramClient> {
-    const existingClient = this.clients.get(userId);
-    if (existingClient) {
+  public async disconnectClient(userId: number): Promise<void> {
+    const client = this.clients.get(userId);
+    if (client) {
       try {
-        // Verify client is still connected
-        await existingClient.client.getMe();
-        existingClient.metrics.lastUsed = new Date();
-        return existingClient.client;
-      } catch (error) {
-        // Remove invalid client
-        await this.cleanup(userId);
-      }
-    }
-
-    // Check pool size
-    if (this.clients.size >= this.maxPoolSize) {
-      // Remove least recently used client
-      const oldestClient = Array.from(this.clients.entries())
-        .sort((a, b) => a[1].metrics.lastUsed.getTime() - b[1].metrics.lastUsed.getTime())[0];
-      if (oldestClient) {
-        await this.cleanup(oldestClient[0]);
-      }
-    }
-
-    // Create new client
-    const client = await this.createClient(userId);
-    this.clients.set(userId, {
-      client,
-      metrics: {
-        latency: 0,
-        errors: 0,
-        lastUsed: new Date()
-      }
-    });
-
-    return client;
-  }
-
-  public async cleanup(userId: number): Promise<void> {
-    const clientData = this.clients.get(userId);
-    if (clientData) {
-      try {
-        await clientData.client.disconnect();
+        await client.disconnect();
       } catch (error) {
         logger.error('Error disconnecting client:', error);
+      } finally {
+        this.clients.delete(userId);
+        this.emit(Events.DISCONNECTED, userId);
       }
-      this.clients.delete(userId);
-    }
-  }
-
-  public async getPoolStatus() {
-    return {
-      activeConnections: this.clients.size,
-      totalErrors: Array.from(this.clients.values())
-        .reduce((sum, client) => sum + client.metrics.errors, 0),
-      averageLatency: Array.from(this.clients.values())
-        .reduce((sum, client) => sum + client.metrics.latency, 0) / Math.max(this.clients.size, 1)
-    };
-  }
-}
-
-class TelegramClientManager {
-  private static instance: TelegramClientManager;
-  private pool: TelegramPool;
-
-  private constructor() {
-    this.pool = TelegramPool.getInstance();
-  }
-
-  public static getInstance(): TelegramClientManager {
-    if (!TelegramClientManager.instance) {
-      TelegramClientManager.instance = new TelegramClientManager();
-    }
-    return TelegramClientManager.instance;
-  }
-
-  public async getClient(userId: number): Promise<TelegramClient> {
-    try {
-      return await this.pool.getClient(userId);
-    } catch (error) {
-      logger.error('Failed to get client from pool', error);
-      throw error;
-    }
-  }
-
-  public async cleanupClient(userId: string): Promise<void> {
-    try {
-      await this.pool.cleanup(parseInt(userId));
-    } catch (error) {
-      logger.error('Failed to cleanup client', error);
     }
   }
 
   public async cleanupAllClients(): Promise<void> {
-    const status = await this.pool.getPoolStatus();
-    logger.info('Cleaning up all clients', { activeConnections: status.activeConnections });
-
-    const clients = Array.from({ length: status.activeConnections }, (_, i) => i);
-    await Promise.all(clients.map(userId => this.cleanupClient(userId.toString())));
+    const disconnections = Array.from(this.clients.keys()).map(userId =>
+      this.disconnectClient(userId)
+    );
+    await Promise.all(disconnections);
   }
 
-  public async isConnected(userId: number): Promise<boolean> {
-    try {
-      await this.pool.getClient(userId);
-      return true;
-    } catch (error) {
-      return false;
-    }
+  public isConnected(userId: number): boolean {
+    return this.clients.has(userId);
   }
 
-  public async getPoolStatus() {
-    return await this.pool.getPoolStatus();
+  public isRateLimited(userId: number): boolean {
+    const rateLimitUntil = this.rateLimitedUsers.get(userId);
+    return rateLimitUntil !== undefined && rateLimitUntil > Date.now();
+  }
+
+  public getRateLimitExpiry(userId: number): number | null {
+    const rateLimitUntil = this.rateLimitedUsers.get(userId);
+    return rateLimitUntil || null;
+  }
+
+  public getConnectionStats() {
+    return {
+      activeConnections: this.clients.size,
+      pendingConnections: this.connecting.size,
+      rateLimitedUsers: this.rateLimitedUsers.size
+    };
+  }
+
+  // Status broadcast
+  private broadcastStatus() {
+    const stats = this.getConnectionStats();
+    global.broadcastStatus?.({
+      type: 'status',
+      connected: stats.activeConnections > 0,
+      lastChecked: new Date().toISOString(),
+      metrics: {
+        activeConnections: stats.activeConnections,
+        pendingConnections: stats.pendingConnections,
+        rateLimitedUsers: stats.rateLimitedUsers
+      }
+    });
+  }
+
+  // Set up status broadcasting
+  public startStatusBroadcast(interval = 30000) {
+    setInterval(() => this.broadcastStatus(), interval);
   }
 }
 
@@ -203,58 +241,8 @@ export const clientManager = TelegramClientManager.getInstance();
 process.once("SIGINT", () => clientManager.cleanupAllClients());
 process.once("SIGTERM", () => clientManager.cleanupAllClients());
 
-// Status broadcast interface
-interface StatusUpdate {
-  type: 'status';
-  connected: boolean;
-  user?: {
-    id: string;
-    username: string;
-    firstName?: string;
-  };
-  lastChecked: string;
-}
+// Start status broadcasting
+clientManager.startStatusBroadcast();
 
-declare global {
-  var broadcastStatus: ((status: StatusUpdate) => void) | undefined;
-}
-
-// Check connection and broadcast status
-async function checkAndBroadcastStatus() {
-  try {
-    const status = await clientManager.getPoolStatus();
-
-    logger.info('Broadcasting connection status', {
-      activeConnections: status.activeConnections,
-      totalErrors: status.totalErrors,
-      averageLatency: status.averageLatency
-    });
-
-    global.broadcastStatus?.({
-      type: 'status',
-      connected: status.activeConnections > 0,
-      lastChecked: new Date().toISOString()
-    });
-  } catch (error) {
-    logger.error('Error in status check', error);
-    global.broadcastStatus?.({
-      type: 'status',
-      connected: false,
-      lastChecked: new Date().toISOString()
-    });
-  }
-}
-
-// Start periodic status checks
-setInterval(checkAndBroadcastStatus, 30 * 1000);
-
-// Export disconnect function
-export async function disconnectClient(userId: number): Promise<void> {
-  try {
-    await clientManager.cleanupClient(userId.toString());
-    logger.info('Client disconnected successfully', { userId });
-  } catch (error) {
-    logger.error('Error disconnecting client', error);
-    throw error;
-  }
-}
+// Export for use in other modules
+export { clientManager as default };

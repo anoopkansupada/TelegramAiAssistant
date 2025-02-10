@@ -10,6 +10,7 @@ import { registerRoutes } from "./routes";
 import { db } from "./db";
 import { neonConfig } from "@neondatabase/serverless";
 import { storage } from "./storage";
+import { sql } from "drizzle-orm";
 
 dotenv.config();
 
@@ -128,8 +129,9 @@ async function initializeTelegramClient() {
 
 async function startServer() {
   try {
-    // Test database connection first
-    await db.execute('SELECT 1');
+    // Test database connection using Drizzle's query builder
+    const result = await db.execute(sql`SELECT 1`);
+    if (!result) throw new Error("Database connection failed");
     logger.info("✅ Database connection successful");
 
     const app = express();
@@ -138,7 +140,7 @@ async function startServer() {
     app.use(express.urlencoded({ extended: false }));
 
     // Configure session and auth before other middleware
-    setupAuth(app);
+    await setupAuth(app);
 
     // Logging middleware
     app.use((req, res, next) => {
@@ -190,12 +192,15 @@ async function startServer() {
       serveStatic(app);
     }
 
-    const PORT = 5000;
+    const PORT = process.env.PORT || 5000;
     server.listen(PORT, "0.0.0.0", () => {
       log(`serving on port ${PORT}`);
     });
   } catch (error) {
     logger.error("Failed to start server:", error);
+    if (error instanceof Error) {
+      logger.error("Stack trace:", error.stack);
+    }
     process.exit(1);
   }
 }

@@ -1,6 +1,6 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
-import type { PgTable, PgTransaction } from 'drizzle-orm/pg-core';
+import type { PgTable } from 'drizzle-orm/pg-core';
 import ws from "ws";
 import * as schema from "@shared/schema";
 
@@ -19,8 +19,8 @@ pool.on('error', (err, client) => {
   console.error('Unexpected error on idle client', err);
 });
 
-// Create the Drizzle instance
-const db = drizzle(pool, { schema });
+// Create the Drizzle instance with retry wrapper
+const drizzleDb = drizzle(pool, { schema });
 
 // Wrapper function for retrying database operations
 async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
@@ -55,91 +55,44 @@ async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promis
   throw lastError;
 }
 
-// Export db with retry wrapper
-export const dbWithRetry = {
-  // Pass through the raw drizzle instance
-  ...db,
-
-  // Override query methods with retry wrapper
-  query: {
-    ...db.query,
-    execute: async <T>(queryBuilder: { execute: () => Promise<T> }) => {
-      return withRetry(() => queryBuilder.execute());
-    }
+// Export the enhanced db instance with retry capabilities
+export const db = {
+  ...drizzleDb,
+  execute: async <T>(query: Parameters<typeof drizzleDb.execute>[0]): Promise<T> => {
+    return withRetry(() => drizzleDb.execute(query) as Promise<T>);
   },
-
-  // Wrap insert operations with proper types
-  insert: <T extends PgTable>(table: T) => {
-    const baseInsert = db.insert(table);
-    return {
-      ...baseInsert,
-      values: (values: Parameters<typeof baseInsert.values>[0]) => ({
+  insert: <T extends PgTable>(table: T) => ({
+    values: (values: any) => ({
+      returning: () => ({
+        execute: async () => withRetry(() => 
+          drizzleDb.insert(table).values(values).returning().execute()
+        )
+      })
+    })
+  }),
+  update: <T extends PgTable>(table: T) => ({
+    set: (values: any) => ({
+      where: (condition: any) => ({
         returning: () => ({
-          execute: async () => {
-            return withRetry(() => 
-              baseInsert.values(values).returning().execute()
-            );
-          }
+          execute: async () => withRetry(() => 
+            drizzleDb.update(table).set(values).where(condition).returning().execute()
+          )
         })
       })
-    };
-  },
-
-  // Wrap update operations with proper types
-  update: <T extends PgTable>(table: T) => {
-    const baseUpdate = db.update(table);
-    return {
-      ...baseUpdate,
-      set: (values: Parameters<typeof baseUpdate.set>[0]) => ({
-        where: (condition?: Parameters<typeof baseUpdate.where>[0]) => ({
-          returning: () => ({
-            execute: async () => {
-              const query = baseUpdate.set(values);
-              if (condition) {
-                return withRetry(() => 
-                  query.where(condition).returning().execute()
-                );
-              }
-              return withRetry(() => 
-                query.returning().execute()
-              );
-            }
-          })
-        })
+    })
+  }),
+  delete: <T extends PgTable>(table: T) => ({
+    where: (condition: any) => ({
+      returning: () => ({
+        execute: async () => withRetry(() => 
+          drizzleDb.delete(table).where(condition).returning().execute()
+        )
       })
-    };
-  },
-
-  // Wrap delete operations with proper types
-  delete: <T extends PgTable>(table: T) => {
-    const baseDelete = db.delete(table);
-    return {
-      ...baseDelete,
-      where: (condition?: Parameters<typeof baseDelete.where>[0]) => ({
-        returning: () => ({
-          execute: async () => {
-            const query = baseDelete;
-            if (condition) {
-              return withRetry(() => 
-                query.where(condition).returning().execute()
-              );
-            }
-            return withRetry(() => 
-              query.returning().execute()
-            );
-          }
-        })
-      })
-    };
-  },
-
-  // Wrap transaction operations with proper types
+    })
+  }),
   transaction: async <T>(
-    callback: (tx: PgTransaction<typeof schema>) => Promise<T>
+    callback: (tx: typeof drizzleDb) => Promise<T>
   ): Promise<T> => {
-    return withRetry(() => db.transaction(callback));
+    return withRetry(() => drizzleDb.transaction(callback));
   }
 };
-
-// Export the database instance with retry wrapper
-export { dbWithRetry as db };

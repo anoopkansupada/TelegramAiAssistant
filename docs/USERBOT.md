@@ -1,89 +1,114 @@
-┌─────────────────┐      ┌──────────────────┐      ┌───────────────┐
-│  Telegram Bot   │      │   Userbot Client │      │    Storage    │
-│  (telegram.ts)  │◄────►│(userbot-client.ts)│◄────►│   Interface  │
-└─────────────────┘      └──────────────────┘      └───────────────┘
-         ▲                        ▲
-         │                        │
-         ▼                        ▼
-┌─────────────────┐      ┌──────────────────┐
-│    WebSocket    │      │   Status Monitor │
-│    Server      │◄────►│(connection-status)│
-└─────────────────┘      └──────────────────┘
-```
-
-### Client Manager (TelegramClientManager)
-The client manager implements a singleton pattern to ensure consistent client state across the application:
-
-```typescript
+// Current Implementation in userbot-client.ts
 class TelegramClientManager {
   private static instance: TelegramClientManager;
   private client: TelegramClient | null = null;
   private session: string | null = null;
   private connected: boolean = false;
+  private cleanupInProgress: boolean = false;
+
+  // IMPROVEMENT NEEDED: Add connection pooling
+  // IMPROVEMENT NEEDED: Add better session state management
 }
 ```
 
-### Connection Management
-The client implements sophisticated connection management with:
-- Automatic reconnection
-- Connection pooling
-- Session persistence
-- Rate limiting
-- Error recovery
+## Known Issues & Challenges
 
+### 1. Session Management
+Current limitations:
+- Using basic string session storage without encryption
+- No automatic session rotation mechanism
+- Sessions can become invalid without proper cleanup
+- Missing session state verification
+
+Example of current session handling:
 ```typescript
-async getClient(session?: string): Promise<TelegramClient> {
-  // Session validation
-  // Connection establishment
-  // Error handling
-  // Rate limit management
+public async getClient(session?: string): Promise<TelegramClient> {
+  if (this.client && this.session === session && this.connected) {
+    try {
+      await this.client.getMe();
+      return this.client;
+    } catch (error) {
+      // Basic error handling, needs improvement
+      await this.cleanup();
+    }
+  }
+  // ... rest of implementation
 }
 ```
 
-## Authentication Flow
+### 2. Connection Stability
+Current issues:
+- Basic reconnection logic without proper backoff
+- Single connection per instance (no pooling)
+- Limited handling of network failures
+- No proper DC failover mechanism
 
-1. **Initial Connection**
-   - Client requests phone code hash
-   - User receives verification code
-   - Code verification and session establishment
-
-2. **Two-Factor Authentication (if enabled)**
-   - Password verification
-   - 2FA token validation
-   - Session upgrade
-
-3. **Session Management**
-   - Encrypted session storage
-   - Automatic session refresh
-   - Invalid session detection and cleanup
-
-## Error Handling
-
-The client implements comprehensive error handling for common scenarios:
-
+### 3. Error Handling
+Current implementation:
 ```typescript
 try {
-  await client.connect();
+  await this.client.connect();
 } catch (error) {
-  if (error instanceof FloodWaitError) {
-    // Handle rate limiting
-  } else if (error instanceof ConnectionError) {
-    // Handle connection issues
-  }
+  // Basic error handling
+  this.logger.error(`Error in getClient: ${error}`);
+  throw error;
 }
 ```
 
-### Error Categories
-- Network connectivity issues
-- Rate limiting and flood wait
-- Authentication failures
-- Session invalidation
-- API errors
+Needs improvement:
+- Better error categorization
+- Proper recovery strategies
+- Comprehensive logging
+- Automatic retry mechanisms
 
-## Real-time Status Monitoring
+## High-Priority Improvements
 
-### WebSocket Integration
-The system implements real-time status monitoring via WebSocket connections:
+### 1. Session Security Enhancement
+```typescript
+// TODO: Implement secure session storage
+interface SecureSession {
+  sessionString: string;
+  createdAt: Date;
+  lastUsed: Date;
+  deviceInfo: {
+    model: string;
+    systemVersion: string;
+    appVersion: string;
+  };
+}
+```
+
+### 2. Connection Pooling
+```typescript
+// TODO: Add to TelegramClientManager
+private clientPool: Map<string, {
+  client: TelegramClient;
+  lastUsed: Date;
+  connectionHealth: {
+    latency: number;
+    errors: number;
+  };
+}>;
+```
+
+### 3. Error Recovery
+```typescript
+// TODO: Implement comprehensive error handling
+interface ErrorHandlingStrategy {
+  maxRetries: number;
+  backoffFactor: number;
+  errorCategories: {
+    NETWORK: RetryStrategy;
+    FLOOD_WAIT: RetryStrategy;
+    AUTH: RetryStrategy;
+  };
+}
+```
+
+## Current Status Monitoring
+
+### Connection Status Component (`client/src/components/connection-status.tsx`)
+Current implementation provides basic status monitoring via WebSocket:
 
 ```typescript
 interface StatusUpdate {
@@ -98,140 +123,22 @@ interface StatusUpdate {
 }
 ```
 
-### Connection Status Component
-The React component `connection-status.tsx` provides real-time visibility into the userbot's connection state:
-- Connection status indication
-- User information display
-- Last check timestamp
-- Automatic reconnection handling
+Needs enhancement:
+- Add detailed connection metrics
+- Implement automatic recovery mechanisms
+- Add comprehensive error reporting
 
-## Status Monitoring
+## Integration Points
 
-### Status Monitoring
-The client includes built-in health monitoring:
+### Current Storage Interface
 ```typescript
-async checkAndBroadcastStatus() {
-  // Connection verification
-  // User authentication check
-  // Session validity check
-  // Metrics collection
+// Current basic implementation
+interface Storage {
+  saveSession(sessionString: string): Promise<void>;
+  loadSession(): Promise<string | null>;
 }
-```
 
-### Health Metrics
-- Connection state
-- Message latency
-- Session age
-- Error rates
-- Flood wait occurrences
-
-## Best Practices
-
-### Connection Management
-1. Always use the singleton client manager:
-   ```typescript
-   const client = await clientManager.getClient(session);
-   ```
-
-2. Implement proper cleanup:
-   ```typescript
-   process.on('SIGTERM', cleanup);
-   process.on('SIGINT', cleanup);
-   ```
-
-### Error Handling
-1. Always implement retries with exponential backoff:
-   ```typescript
-   let retries = 0;
-   while (retries < maxRetries) {
-     try {
-       await operation();
-       break;
-     } catch (error) {
-       retries++;
-       await delay(1000 * Math.pow(2, retries));
-     }
-   }
-   ```
-
-2. Handle flood wait errors appropriately:
-   ```typescript
-   if (error instanceof FloodWaitError) {
-     await delay(error.seconds * 1000);
-     return retry();
-   }
-   ```
-
-### Session Management
-1. Encrypt sensitive session data:
-   ```typescript
-   const encrypted = await encryptSession(session);
-   await storage.saveSession(encrypted);
-   ```
-
-2. Implement session rotation:
-   ```typescript
-   async rotateSession() {
-     const newSession = await createNewSession();
-     await validateSession(newSession);
-     await switchToSession(newSession);
-   }
-   ```
-
-## API Reference
-
-### Client Manager
-```typescript
-interface TelegramClientManager {
-  getClient(session?: string): Promise<TelegramClient>;
-  cleanup(): Promise<void>;
-  isConnected(): boolean;
-}
-```
-
-### Status Updates
-```typescript
-interface StatusUpdate {
-  type: 'status';
-  connected: boolean;
-  user?: {
-    id: string;
-    username: string;
-    firstName?: string;
-  };
-  lastChecked: string;
-}
-```
-
-## Common Issues and Solutions
-
-### Connection Issues
-1. **Problem**: Client fails to connect
-   **Solution**: Implement connection retry with backoff
-   ```typescript
-   while (retries < maxRetries) {
-     try {
-       await client.connect();
-       break;
-     } catch (error) {
-       await exponentialBackoff(retries);
-     }
-   }
-   ```
-
-2. **Problem**: Session invalidation
-   **Solution**: Implement automatic session refresh
-   ```typescript
-   if (error.message.includes('SESSION_REVOKED')) {
-     await clientManager.cleanup();
-     await requestNewSession();
-   }
-   ```
-
-### Rate Limiting
-1. **Problem**: FloodWaitError
-   **Solution**: Implement proper delay handling
-   ```typescript
-   if (error instanceof FloodWaitError) {
-     await delay(error.seconds * 1000);
-   }
+// TODO: Enhance with:
+// - Session encryption
+// - Metadata storage
+// - Session validation

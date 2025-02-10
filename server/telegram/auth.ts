@@ -36,8 +36,9 @@ export class TelegramAuthenticationError extends Error {
 export async function requestVerificationCode(phoneNumber: string): Promise<{ phoneCodeHash: string }> {
   logger.info('Requesting verification code', { phoneNumber });
 
+  const stringSession = new StringSession(""); // Empty session for requesting code
   const client = new TelegramClient(
-    new StringSession(""),
+    stringSession,
     parseInt(process.env.TELEGRAM_API_ID!),
     process.env.TELEGRAM_API_HASH!,
     {
@@ -49,15 +50,19 @@ export async function requestVerificationCode(phoneNumber: string): Promise<{ ph
 
   try {
     await client.connect();
-
-    const result = await client.sendCode({
+    const result = await client.invoke(new Api.auth.SendCode({
       phoneNumber,
       apiId: parseInt(process.env.TELEGRAM_API_ID!),
       apiHash: process.env.TELEGRAM_API_HASH!,
-    });
+      settings: new Api.CodeSettings({
+        allowFlashcall: false,
+        currentNumber: true,
+        allowAppHash: true,
+      })
+    }));
 
     logger.info('Verification code sent successfully', { phoneNumber });
-    return { phoneCodeHash: result.phoneCodeHash };
+    return { phoneCodeHash: result.phoneCodeHash as string };
   } catch (error: any) {
     logger.error('Failed to request verification code', error);
     throw APIError.fromTelegramError(error);
@@ -76,8 +81,9 @@ export async function verifyCode(
 ): Promise<string> {
   logger.info('Verifying code', { phoneNumber });
 
+  const stringSession = new StringSession(""); // Empty session for verification
   const client = new TelegramClient(
-    new StringSession(""),
+    stringSession,
     parseInt(process.env.TELEGRAM_API_ID!),
     process.env.TELEGRAM_API_HASH!,
     {
@@ -94,8 +100,15 @@ export async function verifyCode(
     const signInResult = await client.signIn({
       phoneNumber,
       phoneCode: code,
-      phoneCodeHash,
+      phoneCodeHash
     });
+
+    if ('signUp' in signInResult && signInResult.signUp) {
+      throw new TelegramAuthenticationError(
+        TelegramAuthError.INVALID_CREDENTIALS,
+        'Sign up required'
+      );
+    }
 
     // Get the session string for storage
     const session = client.session.save() as unknown as string;
@@ -115,16 +128,38 @@ export async function verifyCode(
  */
 export async function verify2FA(
   password: string,
-  client: TelegramClient
+  session: string
 ): Promise<void> {
   logger.info('Verifying 2FA password');
 
+  const stringSession = new StringSession(session);
+  const client = new TelegramClient(
+    stringSession,
+    parseInt(process.env.TELEGRAM_API_ID!),
+    process.env.TELEGRAM_API_HASH!,
+    {
+      connectionRetries: 5,
+      useWSS: true,
+      maxConcurrentDownloads: 10
+    }
+  );
+
   try {
+    await client.connect();
     const result = await client.checkPassword(password);
+
+    if (!result) {
+      throw new TelegramAuthenticationError(
+        TelegramAuthError.PASSWORD_INVALID,
+        'Invalid 2FA password'
+      );
+    }
+
     logger.info('2FA password verified successfully');
-    return result;
   } catch (error: any) {
     logger.error('Failed to verify 2FA password', error);
     throw APIError.fromTelegramError(error);
+  } finally {
+    await client.disconnect();
   }
 }

@@ -1,31 +1,37 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
-import dotenv from "dotenv";
 import { CustomLogger } from "./utils/logger";
 
 const logger = new CustomLogger("[TelegramAuth]");
 
-// Using the API credentials from your screenshot
-const apiId = 20186468;
-const apiHash = "5462496a1c6075aa3e29754a1e3ee494";
-
-const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
-    connectionRetries: 5,
-    useWSS: true,
-});
+// Using the API credentials from environment variables
+const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+const apiHash = process.env.TELEGRAM_API_HASH || "";
 
 async function start() {
     try {
         logger.info("Starting Telegram authentication process...");
-        await client.connect();
+
+        // Initialize with empty session for new authentication
+        const stringSession = new StringSession("");
+        const client = new TelegramClient(stringSession, apiId, apiHash, {
+            connectionRetries: 5,
+            useWSS: true,
+        });
 
         logger.info("Starting phone number authentication");
         await client.start({
-            phoneNumber: async () => process.env.TELEGRAM_PHONE_NUMBER!,
-            password: async () => "",  // If you have 2FA, we'll need to add this
+            phoneNumber: async () => {
+                logger.info("Using phone number from TELEGRAM_PHONE_NUMBER env variable");
+                return process.env.TELEGRAM_PHONE_NUMBER!;
+            },
+            password: async () => {
+                logger.info("2FA password required - waiting for TELEGRAM_PASSWORD to be set");
+                return process.env.TELEGRAM_PASSWORD || "";
+            },
             phoneCode: async () => {
-                // We'll need the verification code
-                logger.info("Please set the TELEGRAM_CODE secret with the code sent to your Telegram app");
+                logger.info("Verification code needed - please set the TELEGRAM_CODE secret with the code sent to your Telegram app");
+                logger.info("Waiting for code to be set...");
                 return process.env.TELEGRAM_CODE || "";
             },
             onError: (err) => {
@@ -35,18 +41,24 @@ async function start() {
         });
 
         logger.info("✅ Successfully logged into Telegram!");
-        const sessionString = client.session.save();
-        logger.info("\n=== YOUR SESSION STRING (save this) ===");
+        const sessionString = client.session.save() as unknown as string;
+        logger.info("=== YOUR SESSION STRING (save this) ===");
         logger.info(sessionString);
-        logger.info("=======================================\n");
+        logger.info("=======================================");
         logger.info("Copy this session string and set it as the TELEGRAM_SESSION secret in Replit.");
 
         await client.disconnect();
         process.exit(0);
     } catch (error) {
         logger.error("❌ Error logging into Telegram:", error);
+        if (error instanceof Error) {
+            logger.error("Stack trace:", error.stack?.split('\n'));
+        }
         process.exit(1);
     }
 }
 
-start();
+// Only start if running directly
+if (require.main === module) {
+    start();
+}

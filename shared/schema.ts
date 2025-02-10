@@ -169,7 +169,15 @@ export const messages = pgTable("messages", {
   direction: text("direction").default("inbound"), // inbound or outbound
   channel: text("channel").default("telegram"),
   sentiment: text("sentiment"),
-  metadata: jsonb("metadata"),
+  entities: jsonb("entities").default([]),
+  topics: text("topics").array(),
+  summary: text("summary"),
+  contentAnalysis: jsonb("content_analysis").default({
+    confidence: 0,
+    language: null,
+    toxicity: null,
+    engagement: null
+  }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -314,7 +322,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
 });
 
-// Fix the company schema insert validation
+// Update insertCompanySchema to include more robust validation
 export const insertCompanySchema = createInsertSchema(companies).pick({
   name: true,
   legalName: true,
@@ -358,13 +366,47 @@ export const insertCompanySchema = createInsertSchema(companies).pick({
   createdById: true,
 }).extend({
   knowledgeHub: z.object({
-    documents: z.array(z.any()),
+    documents: z.array(z.object({
+      id: z.string(),
+      title: z.string(),
+      type: z.string(),
+      url: z.string(),
+      version: z.string().optional(),
+      createdAt: z.string().datetime(),
+      updatedAt: z.string().datetime().optional()
+    })),
     categories: z.array(z.string()),
-    access_rules: z.record(z.any()),
-    metadata: z.record(z.any()),
+    access_rules: z.record(z.object({
+      roles: z.array(z.string()),
+      permissions: z.array(z.string())
+    })),
+    metadata: z.record(z.unknown())
   }).optional(),
   documentCategories: z.array(z.string()).optional(),
   lastDocumentUpdate: z.string().datetime().optional(),
+});
+
+// Update insertCompanyDocumentSchema with more robust validation
+export const insertCompanyDocumentSchema = createInsertSchema(companyDocuments).pick({
+  companyId: true,
+  title: true,
+  description: true,
+  documentType: true,
+  category: true,
+  url: true,
+  version: true,
+  status: true,
+  accessLevel: true,
+  metadata: true,
+}).extend({
+  title: z.string().min(1, "Title is required").max(255),
+  documentType: z.enum(["contract", "proposal", "report", "presentation", "other"]),
+  category: z.string().min(1, "Category is required"),
+  url: z.string().url("Invalid document URL"),
+  version: z.string().optional(),
+  status: z.enum(["draft", "active", "archived"]).default("active"),
+  accessLevel: z.enum(["internal", "restricted", "public"]).default("internal"),
+  metadata: z.record(z.unknown()).optional()
 });
 
 export const insertContactSchema = createInsertSchema(contacts).pick({
@@ -400,7 +442,17 @@ export const insertMessageSchema = createInsertSchema(messages).pick({
   direction: true,
   channel: true,
   sentiment: true,
-  metadata: true,
+  entities: true,
+  topics: true,
+  summary: true,
+  contentAnalysis: true,
+}).extend({
+  contentAnalysis: z.object({
+    confidence: z.number().min(0).max(1),
+    language: z.string().nullable(),
+    toxicity: z.number().min(0).max(1).nullable(),
+    engagement: z.number().min(0).max(1).nullable()
+  }).optional()
 });
 
 export const insertAnnouncementSchema = createInsertSchema(announcements).pick({
@@ -515,6 +567,15 @@ export const insertCompanyDocumentSchema = createInsertSchema(companyDocuments).
   status: true,
   accessLevel: true,
   metadata: true,
+}).extend({
+  title: z.string().min(1, "Title is required").max(255),
+  documentType: z.enum(["contract", "proposal", "report", "presentation", "other"]),
+  category: z.string().min(1, "Category is required"),
+  url: z.string().url("Invalid document URL"),
+  version: z.string().optional(),
+  status: z.enum(["draft", "active", "archived"]).default("active"),
+  accessLevel: z.enum(["internal", "restricted", "public"]).default("internal"),
+  metadata: z.record(z.unknown()).optional()
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

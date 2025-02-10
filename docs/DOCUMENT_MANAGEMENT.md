@@ -1,14 +1,3 @@
-# Document Management System Documentation
-
-## Overview
-The document management system provides a structured way to store, organize, and manage company-related documents with proper version control, access management, and categorization capabilities.
-
-## System Components
-
-### 1. Knowledge Hub (companies table)
-The knowledge hub is implemented as a JSON column in the companies table, providing flexible document organization:
-
-```typescript
 interface KnowledgeHub {
   documents: DocumentReference[];
   categories: string[];
@@ -88,9 +77,23 @@ interface CompanyDocument {
 ```typescript
 async function createDocument(doc: InsertCompanyDocument) {
   // Validate document metadata
-  // Ensure proper categorization
+  validateDocumentMetadata(doc);
+
   // Set initial access rules
-  // Create document record
+  const accessRules = generateDefaultAccessRules(doc);
+
+  // Create document record with proper versioning
+  const document = await createDocumentRecord({
+    ...doc,
+    version: '1.0',
+    status: 'active',
+    accessRules
+  });
+
+  // Update company's knowledge hub
+  await updateCompanyKnowledgeHub(doc.companyId, document);
+
+  return document;
 }
 ```
 
@@ -102,8 +105,16 @@ async function updateDocumentAccess(
   accessRules: AccessRules
 ) {
   // Validate access rules
+  validateAccessRules(accessRules);
+
   // Update document access
-  // Log access changes
+  await updateDocumentAccessLevel(documentId, accessLevel);
+
+  // Update access rules in knowledge hub
+  await updateKnowledgeHubAccessRules(documentId, accessRules);
+
+  // Log access changes for audit
+  await logAccessChange(documentId, accessLevel, accessRules);
 }
 ```
 
@@ -114,9 +125,20 @@ async function createNewVersion(
   newVersion: string,
   changes: string
 ) {
+  // Archive current version
+  await archiveCurrentVersion(documentId);
+
   // Create new version
-  // Archive old version
+  const newDoc = await createVersionedDocument(documentId, newVersion);
+
   // Update document metadata
+  await updateDocumentMetadata(documentId, {
+    version: newVersion,
+    changes,
+    previousVersion: currentVersion
+  });
+
+  return newDoc;
 }
 ```
 
@@ -126,62 +148,70 @@ async function createNewVersion(
 - Implement proper authentication
 - Regular access audits
 - Secure document storage
+- Role-based access control
 
 ### 2. Data Protection
 - Encryption at rest
 - Secure transmission
 - Backup procedures
+- Version control
 
 ### 3. Audit Trail
 - Track all document actions
 - Monitor access patterns
 - Regular security reviews
+- Change logging
 
 ## Performance Optimization
 
 ### 1. Database Indexes
-- Company-specific indexes
-- Category and type indexes
-- Status-based indexes
+```sql
+-- Company-specific indexes
+CREATE INDEX idx_company_documents_company ON company_documents(company_id);
+
+-- Category and type indexes
+CREATE INDEX idx_company_documents_type ON company_documents(document_type, category);
+
+-- Status-based indexes
+CREATE INDEX idx_company_documents_status ON company_documents(status, access_level);
+```
 
 ### 2. Query Optimization
 - Efficient document retrieval
 - Optimized search functionality
 - Proper pagination
+- Caching strategy
 
-## Maintenance
+## Maintenance Tasks
 
 ### 1. Regular Tasks
 - Category cleanup
 - Access review
 - Version consolidation
+- Storage optimization
 
 ### 2. Monitoring
 - Storage usage
 - Access patterns
 - Performance metrics
+- Error rates
 
 ## Error Handling
-
-### 1. Common Scenarios
-- Invalid document types
-- Access violations
-- Version conflicts
-
-### 2. Recovery Procedures
-- Document restoration
-- Version recovery
-- Access reset
-
-## Future Improvements
-
-### 1. Planned Features
-- Full-text search
-- Document preview
-- Automated categorization
-- Integration with external storage
-
-### 2. Scalability
-- Distributed storage
-- Caching implementation
-- Performance optimization
+```typescript
+try {
+  await createDocument(doc);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Handle validation errors
+    handleValidationError(error);
+  } else if (error instanceof AccessDeniedError) {
+    // Handle access control errors
+    handleAccessError(error);
+  } else if (error instanceof StorageError) {
+    // Handle storage-related errors
+    handleStorageError(error);
+  } else {
+    // Handle unexpected errors
+    handleUnexpectedError(error);
+  }
+}

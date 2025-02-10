@@ -10,7 +10,7 @@ export class ErrorClassifier {
 
   classify(error: Error): ErrorCategory {
     const errorString = `${error.name}: ${error.message}`;
-    
+
     // Check against known patterns
     for (const pattern of this.patterns) {
       if (pattern.regex.test(errorString)) {
@@ -33,37 +33,47 @@ export class ErrorClassifier {
 
   generateInsights(): ErrorInsights {
     const insights: ErrorInsights = {
-      categories: {},
-      trends: {},
+      categories: {
+        validation: 0,
+        network: 0,
+        database: 0,
+        auth: 0,
+        telegram: 0,
+        system: 0,
+        unknown: 0
+      },
+      trends: {
+        validation: 0,
+        network: 0,
+        database: 0,
+        auth: 0,
+        telegram: 0,
+        system: 0,
+        unknown: 0
+      },
       recommendations: []
     };
 
     // Analyze error distribution
-    for (const [error, data] of this.errorHistory.entries()) {
-      if (!insights.categories[data.category]) {
-        insights.categories[data.category] = 0;
-      }
+    for (const [, data] of this.errorHistory) {
       insights.categories[data.category]++;
 
       // Analyze trends (last 24 hours)
       if (Date.now() - data.lastOccurrence.getTime() < 24 * 60 * 60 * 1000) {
-        if (!insights.trends[data.category]) {
-          insights.trends[data.category] = 0;
-        }
         insights.trends[data.category]++;
       }
     }
 
     // Generate recommendations
-    for (const [category, count] of Object.entries(insights.categories)) {
+    Object.entries(insights.categories).forEach(([category, count]) => {
       if (count > 10) {
         insights.recommendations.push({
-          category,
+          category: category as ErrorCategory,
           message: `High number of ${category} errors detected (${count} occurrences)`,
           priority: 'high'
         });
       }
-    }
+    });
 
     return insights;
   }

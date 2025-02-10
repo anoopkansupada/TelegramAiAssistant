@@ -5,7 +5,7 @@ import { APMCollector } from './apmCollector';
 
 export * from './types';
 
-export const debugger = {
+export const debugTools = {
   coverageReporter: new CoverageReporter(),
   errorClassifier: new ErrorClassifier(),
   crashReporter: new CrashReporter(),
@@ -13,7 +13,7 @@ export const debugger = {
 };
 
 // Initialize default error patterns
-debugger.errorClassifier.updatePatterns([
+debugTools.errorClassifier.updatePatterns([
   {
     regex: /ECONNREFUSED|ETIMEDOUT|ENOTFOUND/,
     category: 'network',
@@ -42,6 +42,6 @@ debugger.errorClassifier.updatePatterns([
 ]);
 
 // Start coverage tracking
-debugger.coverageReporter.trackChanges();
+debugTools.coverageReporter.trackChanges();
 
-export default debugger;
+export default debugTools;

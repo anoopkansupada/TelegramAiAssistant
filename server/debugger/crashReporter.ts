@@ -9,7 +9,7 @@ export class CrashReporter {
 
   capture(error: Error): string {
     const id = `crash_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     this.crashes.set(id, {
       error,
       timestamp: new Date(),
@@ -37,12 +37,13 @@ export class CrashReporter {
     const now = Date.now();
     const stats: CrashStatistics = {
       total: this.crashes.size,
-      recent: 0, // Last hour
+      recent: 0,
       byType: {},
       timeline: []
     };
 
-    for (const [id, crash] of this.crashes.entries()) {
+    // Convert Map entries to array before iteration
+    Array.from(this.crashes.entries()).forEach(([id, crash]) => {
       // Count recent crashes
       if (now - crash.timestamp.getTime() < 60 * 60 * 1000) {
         stats.recent++;
@@ -62,7 +63,7 @@ export class CrashReporter {
         type,
         message: crash.error.message
       });
-    }
+    });
 
     // Sort timeline by timestamp
     stats.timeline.sort((a, b) => 

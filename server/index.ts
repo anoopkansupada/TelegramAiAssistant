@@ -2,7 +2,6 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
-import fs from "fs";
 import dotenv from "dotenv";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
@@ -10,15 +9,15 @@ import { CustomLogger } from "./utils/logger";
 import { registerRoutes } from "./routes";
 import { db } from "./db";
 import { neonConfig } from "@neondatabase/serverless";
+import { storage } from "./storage";
 
 dotenv.config();
 
 const logger = new CustomLogger("[TelegramAuth]");
-const SESSION_FILE_PATH = "./telegram.session.json";
 
 // Configure neon to handle WebSocket errors gracefully
 (neonConfig as any).wssClosed = () => {
-  logger.warn("Database connection closed");
+  logger.warn("Database connection closed, will attempt reconnect automatically");
 };
 
 (neonConfig as any).wssError = (error: Error) => {
@@ -46,52 +45,48 @@ function isValidSessionString(session: string): boolean {
   }
 }
 
-async function loadSessionString(): Promise<string> {
-  try {
-    // Try loading from environment variable first
-    let sessionString = process.env.TELEGRAM_SESSION;
-
-    // If not in env, try loading from file
-    if (!sessionString && fs.existsSync(SESSION_FILE_PATH)) {
-      sessionString = fs.readFileSync(SESSION_FILE_PATH, "utf8").trim();
-    }
-
-    return sessionString || "";
-  } catch (error) {
-    logger.error("Error loading session string", { error });
-    return "";
-  }
-}
-
 let client: TelegramClient | null = null;
 
 async function initializeTelegramClient() {
   try {
-    const sessionString = await loadSessionString();
     const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
     const apiHash = process.env.TELEGRAM_API_HASH || "";
+    const phoneNumber = process.env.TELEGRAM_PHONE_NUMBER;
 
-    if (!sessionString) {
-      logger.error("Missing session string");
+    if (!apiId || !apiHash || !phoneNumber) {
+      logger.error("Missing required environment variables (TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE_NUMBER)");
       return null;
     }
 
-    if (!isValidSessionString(sessionString)) {
-      logger.error("Invalid session string format");
-      return null;
-    }
-
-    const stringSession = new StringSession(sessionString.trim());
+    // Create a new client
+    const stringSession = new StringSession("");
     client = new TelegramClient(stringSession, apiId, apiHash, {
       connectionRetries: 5,
       useWSS: true,
       maxConcurrentDownloads: 10,
       deviceModel: "Replit CRM",
       systemVersion: "1.0.0",
-      appVersion: "1.0.0"
+      appVersion: "1.0.0",
+      retryDelay: 1000
     });
 
-    await client.connect();
+    // Start the client with phone number
+    await client.start({
+      phoneNumber: async () => phoneNumber,
+      password: async () => "",
+      phoneCode: async () => {
+        logger.info("Verification code required");
+        // In production, this should be handled through your UI
+        return process.env.TELEGRAM_CODE || "";
+      },
+      onError: (err) => {
+        if (err.code === 420) { // FLOOD_WAIT
+          logger.warn("Rate limited during initialization", { seconds: err.seconds });
+        } else {
+          logger.error("Client start error:", err);
+        }
+      },
+    });
 
     // Verify connection is working
     const me = await client.getMe();
@@ -99,16 +94,33 @@ async function initializeTelegramClient() {
       throw new Error("Failed to get user info after connection");
     }
 
-    // Save working session to file
+    // Save session to database
     const savedSession = client.session.save() as unknown as string;
-    fs.writeFileSync(SESSION_FILE_PATH, savedSession);
+    await storage.createTelegramSession({
+      userId: me.id.toJSNumber(), // Fix: using toJSNumber() instead of toNumber()
+      sessionString: savedSession,
+      apiId: apiId.toString(),
+      apiHash,
+      phoneNumber: me.phone || "",
+      lastAuthDate: new Date(),
+      lastUsed: new Date(),
+      isActive: true,
+      retryCount: 0,
+      metadata: {}
+    });
 
     logger.info("✅ Successfully connected to Telegram!", { userId: me.id });
     return client;
-  } catch (error) {
-    logger.error("❌ Error connecting to Telegram:", error);
-    if (error instanceof Error) {
-      logger.error("Stack trace:", error.stack);
+  } catch (error: any) {
+    if (error.code === 401) {
+      logger.error("❌ Authentication failed - invalid credentials");
+    } else if (error.code === 420) {
+      logger.error("❌ Rate limited during initialization", { waitSeconds: error.seconds });
+    } else {
+      logger.error("❌ Error connecting to Telegram:", error);
+      if (error instanceof Error) {
+        logger.error("Stack trace:", error.stack);
+      }
     }
     return null;
   }

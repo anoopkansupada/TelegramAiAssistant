@@ -1,0 +1,163 @@
+Use Proper Session Management:
+Instead of file-based sessions, use a database for persistence. Here's an improved version using PostgreSQL:
+
+typescript
+
+
+Copy code
+
+import { createClient } from 'pg';
+
+const DB_URI = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/database';
+
+const pgClient = new createClient(DB_URI);
+await pgClient.connect();
+
+// Create table if not exists
+await pgClient.query(`
+  CREATE TABLE IF NOT EXISTS telegram_sessions (
+    user_id SERIAL PRIMARY KEY,
+    session_data JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+Improved Session Management Code:
+typescript
+
+
+Copy code
+
+import { TelegramClient } from 'telegram';
+import { StringSession } from 'telegram/sessions';
+import { v4 as uuidv4 } from 'uuid';
+
+const initializeTelegramSession = async (userId: string) => {
+  try {
+    const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+    const apiHash = process.env.TELEGRAM_API_HASH || "";
+
+    if (!apiId || !apiHash) {
+      throw new Error("Missing Telegram API credentials");
+    }
+
+    const client = new TelegramClient(
+      new StringSession(uuidv4()),
+      apiId,
+      apiHash,
+      {
+        connectionRetries: 3,
+        useWSS: true,
+        timeout: 10000
+      }
+    );
+
+    await client.start();
+
+    // Save session to database
+    await pgClient.query(
+      'INSERT INTO telegram_sessions (user_id, session_data) VALUES ($1, $2)',
+      [userId, client.session.save()]
+    );
+
+    return client;
+  } catch (error) {
+    console.error('Failed to initialize Telegram session:', error);
+    return null;
+  }
+};
+Implement Session Recovery:
+typescript
+
+
+Copy code
+
+const recoverTelegramSession = async (userId: string) => {
+  try {
+    const result = await pgClient.query(
+      'SELECT session_data FROM telegram_sessions WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const sessionString = result.rows[0].session_data;
+    const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+    const apiHash = process.env.TELEGRAM_API_HASH || "";
+
+    if (!apiId || !apiHash) {
+      throw new Error("Missing Telegram API credentials");
+    }
+
+    const client = new TelegramClient(
+      new StringSession(sessionString),
+      apiId,
+      apiHash,
+      {
+        connectionRetries: 3,
+        useWSS: true,
+        timeout: 10000
+      }
+    );
+
+    await client.connect();
+    const me = await client.getMe();
+
+    if (!me) {
+      throw new Error("Invalid session state");
+    }
+
+    return client;
+  } catch (error) {
+    console.error('Failed to recover Telegram session:', error);
+    return null;
+  }
+};
+Complete Example with Error Handling:
+typescript
+
+
+Copy code
+
+import { Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { TelegramClient } from 'telegram';
+import { StringSession } from 'telegram/sessions';
+import { createClient } from 'pg';
+
+const DB_URI = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/database';
+const pgClient = new createClient(DB_URI);
+await pgClient.connect();
+
+export async function initializeTelegramClient(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.session.userId;
+    
+    // Try to recover existing session
+    let client = await recoverTelegramSession(userId);
+
+    if (!client) {
+      // Create new session if recovery fails
+      client = await initializeTelegramSession(userId);
+      
+      if (!client) {
+        return res.status(500).json({ 
+          message: 'Failed to initialize Telegram session',
+          error: 'TELEGRAM_SESSION_FAILED'
+        });
+      }
+    }
+
+    // Store client in request for further use
+    req.telegramClient = client;
+    next();
+  } catch (error) {
+    console.error('Error initializing Telegram client:', error);
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: 'TELEGRAM_INITIALIZATION_FAILED'
+    });
+  }
+}

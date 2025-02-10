@@ -11,49 +11,42 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Configure pool with better defaults (retaining some original config for better defaults)
-export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
-  connectionTimeoutMillis: 2000, // How long to wait for a connection
-  maxUses: 7500, // Close & replace a connection after it has been used this many times
-});
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Add error handler to the pool
 pool.on('error', (err, client) => {
   console.error('Unexpected error on idle client', err);
 });
 
-// Create the Drizzle instance directly
-const drizzleDb = drizzle(pool, { schema });
+// Create the Drizzle instance
+export const db = drizzle(pool, { schema });
 
 // Wrapper function for retrying database operations
-async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
+async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
   let lastError;
+  let attempts = 0;
 
-  for (let i = 0; i < 3; i++) {
+  while (attempts < maxRetries) {
     try {
       return await operation();
     } catch (error: any) {
       lastError = error;
+      attempts++;
 
       // Check if error is recoverable
-      if (error.code === '57P01' || // Admin shutdown
+      if (error.code === '57P01' || // Admin shutdown 
           error.code === '08006' || // Connection failure
           error.code === '08001' || // Unable to establish connection
           error.code === '08004') { // Rejected connection
 
-        console.warn(`Database operation failed (attempt ${i + 1}/3):`, error.message);
+        console.warn(`Database operation failed (attempt ${attempts}/${maxRetries}):`, error.message);
 
-        // Wait before retrying
-        if (i < 2) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+        if (attempts < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
           continue;
         }
       }
 
-      // Non-recoverable error or max retries reached
       throw error;
     }
   }
@@ -61,26 +54,24 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   throw lastError;
 }
 
-// Export the db instance with retry wrapper
-export const db = new Proxy(drizzleDb, {
-  get(target, prop) {
-    const value = target[prop as keyof typeof target];
-
-    // Special handling for query builder
-    if (prop === 'query') {
-      return value;
-    }
-
-    // Special handling for transaction
-    if (prop === 'transaction') {
-      return async (...args: any[]) => withRetry(() => value.apply(target, args));
-    }
-
-    // Handle other functions
-    if (typeof value === 'function') {
-      return async (...args: any[]) => withRetry(() => value.apply(target, args));
-    }
-
-    return value;
+// Export db with retry wrapper
+export const dbWithRetry = {
+  ...db,
+  query: async (...args: Parameters<typeof db.query>) => {
+    return withRetry(() => db.query(...args));
+  },
+  insert: async (...args: Parameters<typeof db.insert>) => {
+    return withRetry(() => db.insert(...args));
+  },
+  update: async (...args: Parameters<typeof db.update>) => {
+    return withRetry(() => db.update(...args));
+  },
+  delete: async (...args: Parameters<typeof db.delete>) => {
+    return withRetry(() => db.delete(...args));
+  },
+  transaction: async (...args: Parameters<typeof db.transaction>) => {
+    return withRetry(() => db.transaction(...args));
   }
-});
+};
+
+export { dbWithRetry as db };

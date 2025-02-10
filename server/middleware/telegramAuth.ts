@@ -2,30 +2,43 @@ import { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
 import { clientManager } from '../userbot-client';
 import { CustomLogger } from '../utils/logger';
-import fs from 'fs';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 
 const logger = new CustomLogger('[TelegramAuth]');
-const SESSION_FILE_PATH = "./telegram.session.json";
+const MAX_RETRIES = 3;
+const CONNECTION_TIMEOUT = 5000;
 
 async function attemptSessionRecovery(userId: number): Promise<boolean> {
   try {
     logger.info('Attempting session recovery', { userId });
 
-    // Try loading session from file
-    if (fs.existsSync(SESSION_FILE_PATH)) {
-      const sessionString = fs.readFileSync(SESSION_FILE_PATH, "utf8").trim();
-      const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
-      const apiHash = process.env.TELEGRAM_API_HASH || "";
+    // Get session from database
+    const telegramSession = await storage.getTelegramSession(userId);
+    if (!telegramSession) {
+      logger.warn('No session found in database');
+      return false;
+    }
 
+    // Validate environment variables
+    const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+    const apiHash = process.env.TELEGRAM_API_HASH || "";
+
+    if (!apiId || !apiHash) {
+      logger.error('Missing Telegram API credentials');
+      return false;
+    }
+
+    try {
       const client = new TelegramClient(
-        new StringSession(sessionString),
+        new StringSession(telegramSession.sessionString),
         apiId,
         apiHash,
         {
-          connectionRetries: 3,
-          useWSS: true
+          connectionRetries: MAX_RETRIES,
+          useWSS: true,
+          timeout: CONNECTION_TIMEOUT,
+          retryDelay: 1000
         }
       );
 
@@ -33,19 +46,37 @@ async function attemptSessionRecovery(userId: number): Promise<boolean> {
       const me = await client.getMe();
 
       if (me) {
-        // Save recovered session
-        await storage.updateTelegramSession(userId, {
-          sessionString,
-          lastAuthDate: new Date(),
+        await storage.updateTelegramSession(telegramSession.id, {
           lastUsed: new Date(),
-          isActive: true
+          isActive: true,
+          retryCount: 0
         });
         logger.info('Successfully recovered session', { userId });
         return true;
       }
-    }
 
-    return false;
+      logger.warn('Session recovery failed - invalid session state');
+      return false;
+    } catch (error: any) {
+      // Handle specific Telegram errors
+      if (error.code === 401) { // AUTH_KEY_UNREGISTERED
+        logger.warn('Session invalidated, needs re-authentication');
+        await storage.deactivateTelegramSession(telegramSession.id);
+        return false;
+      }
+
+      if (error.code === 420) { // FLOOD_WAIT
+        const retryAfter = error.seconds || 30;
+        logger.warn('Rate limited, need to wait', { retryAfter });
+        await storage.updateTelegramSession(telegramSession.id, {
+          retryCount: telegramSession.retryCount ?? 0 + 1,
+          metadata: { ...(telegramSession.metadata ?? {}), lastFloodWait: retryAfter }
+        });
+        return false;
+      }
+
+      throw error;
+    }
   } catch (error) {
     logger.error('Session recovery failed', { error });
     return false;
@@ -58,52 +89,82 @@ export async function requireTelegramAuth(
   next: NextFunction
 ) {
   try {
-    // Check if user is logged in
     if (!req.session.userId) {
       logger.warn('User not logged in');
-      return res.status(401).json({ message: 'Authentication required' });
+      return res.status(401).json({ 
+        message: 'Authentication required',
+        code: 'AUTH_REQUIRED'
+      });
     }
 
-    // Check for active Telegram session
     const telegramSession = await storage.getTelegramSession(req.session.userId);
-    if (!telegramSession) {
-      logger.warn('No Telegram session found', { userId: req.session.userId });
+    if (!telegramSession || !telegramSession.isActive) {
+      logger.warn('No active Telegram session found', { userId: req.session.userId });
 
-      // Attempt session recovery
       const recovered = await attemptSessionRecovery(req.session.userId);
       if (!recovered) {
-        return res.status(401).json({ message: 'Telegram authentication required' });
+        return res.status(401).json({ 
+          message: 'Telegram authentication required',
+          code: 'TELEGRAM_AUTH_REQUIRED'
+        });
       }
     }
 
-    // Validate client connection
     try {
       const client = await clientManager.getClient(req.session.userId);
-      const me = await client.getMe(); // Verify connection is active
+      const me = await client.getMe();
 
       if (!me) {
         throw new Error('Invalid session state');
       }
 
-      next();
-    } catch (error) {
-      logger.error('Failed to validate Telegram client', error);
+      // Update last activity
+      if (telegramSession) {
+        await storage.updateTelegramSession(telegramSession.id, {
+          lastUsed: new Date()
+        });
+      }
 
-      // Attempt recovery one last time
+      next();
+    } catch (error: any) {
+      logger.error('Failed to validate Telegram client', { error });
+
+      // Handle specific error cases
+      if (error.code === 401) {
+        if (telegramSession) {
+          await storage.deactivateTelegramSession(telegramSession.id);
+        }
+        return res.status(401).json({
+          message: 'Telegram session expired, please re-authenticate',
+          code: 'TELEGRAM_AUTH_EXPIRED'
+        });
+      }
+
+      if (error.code === 420) {
+        const retryAfter = error.seconds || 30;
+        return res.status(429).json({
+          message: `Rate limited, please try again in ${retryAfter} seconds`,
+          code: 'TELEGRAM_RATE_LIMIT',
+          retryAfter
+        });
+      }
+
       const recovered = await attemptSessionRecovery(req.session.userId);
       if (!recovered) {
-        // Clean up invalid session
         await clientManager.cleanupClient(req.session.userId.toString());
         return res.status(401).json({
           message: 'Telegram session invalid, please re-authenticate',
-          code: 'TELEGRAM_AUTH_REQUIRED'
+          code: 'TELEGRAM_AUTH_FAILED'
         });
       }
 
       next();
     }
   } catch (error) {
-    logger.error('Error in Telegram auth middleware', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    logger.error('Error in Telegram auth middleware', { error });
+    return res.status(500).json({ 
+      message: 'Internal server error',
+      code: 'SERVER_ERROR'
+    });
   }
 }

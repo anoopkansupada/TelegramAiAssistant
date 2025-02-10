@@ -1,5 +1,3 @@
-### 2. Token Refresh Flow
-```sequence
 Client -> Server: POST /api/auth/refresh
 Server -> Database: Validate refresh token
 Database -> Server: Token valid
@@ -550,4 +548,3 @@ Response format:
     "itemsPerPage": 50
   }
 }
-```

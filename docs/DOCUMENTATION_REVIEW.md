@@ -1,73 +1,81 @@
-# Documentation Review Guidelines
-
-## Initial Review Prompt
-```
-As an AI instance reviewing this project's documentation:
-
-1. First Review Phase:
-   - Review all documentation files in /docs
-   - Identify documentation gaps
-   - Note outdated practices
-   - Check for inconsistencies
-
-2. Documentation Standards:
-   - Never remove existing documentation
-   - Add new information as addendums
-   - Include version numbers for new features
-   - Maintain backwards compatibility
-   - Add migration guides for major changes
-
-3. Focus Areas:
-   - Security best practices
-   - Performance optimization
-   - Error handling
-   - Monitoring and debugging
-   - API documentation
-   - Integration guides
-
-4. Update Process:
-   a. Create a summary of proposed changes
-   b. Get user approval for changes
-   c. Add new sections while preserving existing content
-   d. Update cross-references
-   e. Add timestamp and version to changes
-
-5. Version Control:
-   - Add comments indicating when sections were updated
-   - Maintain a changelog
-   - Document deprecated features
-   - Include compatibility notes
+/docs
+├── API.md           # API specifications and endpoints
+├── AUTHENTICATION.md # Authentication flows and security
+├── BEST_PRACTICES.md # Implementation guidelines
+├── DEBUGGING.md     # Troubleshooting guides
+├── DOCUMENTATION_REVIEW.md # Documentation maintenance
+├── ISSUES.md        # Known issues and workarounds
+└── SCHEMA.md        # Data models and migrations
 ```
 
-## Documentation Update Checklist
-- [ ] Review existing documentation
-- [ ] Identify gaps and inconsistencies
-- [ ] Propose updates without removing content
-- [ ] Update cross-references
-- [ ] Add version information
-- [ ] Include migration guides if needed
-- [ ] Update examples with current best practices
-- [ ] Add timestamps to new content
+### 2. Section Structure
+Each documentation file should follow this structure:
+1. Overview/Introduction
+2. Core Concepts
+3. Implementation Details
+4. Examples
+5. Troubleshooting
+6. Version History
 
-## Best Practices
-1. Preserve Historical Context:
-   - Keep existing documentation
-   - Add new sections instead of modifying old ones
-   - Include dates and versions for new additions
+### 3. Version Control Guidelines
+- Use semantic versioning (MAJOR.MINOR.PATCH)
+- Document breaking changes prominently
+- Include migration guides between versions
+- Keep a changelog for each major component
 
-2. Maintain Consistency:
-   - Follow existing formatting
-   - Use consistent terminology
-   - Cross-reference related sections
+### 4. Cross-Referencing
+- Use relative links between documentation files
+- Maintain a consistent navigation structure
+- Include "Related Topics" sections
+- Reference relevant code examples
 
-3. Enhance Readability:
-   - Add examples for new features
-   - Include use cases
-   - Provide troubleshooting guides
+Example cross-references:
+```markdown
+See [Debugging Guidelines](DEBUGGING.md#common-debugging-scenarios) for troubleshooting steps.
+For monitoring thresholds, refer to [Performance Metrics](ISSUES.md#response-time-thresholds).
+View [Best Practices](BEST_PRACTICES.md#monitoring-and-observability) for implementation details.
+```
 
-4. Version Control:
-   - Mark deprecated features
-   - Include upgrade guides
-   - Document breaking changes
+### 5. Example Format
+```markdown
+## Feature Name
 
-Remember: The goal is to enhance and expand documentation while preserving existing knowledge and maintaining backward compatibility.
+### Overview
+Brief description of the feature
+
+### Implementation
+```typescript
+// Code example
+const example = new Feature();
+```
+
+### Usage
+Step-by-step usage instructions
+
+### Common Issues
+- Issue 1: Solution 1
+- Issue 2: Solution 2
+
+### 6. Documentation Dependencies
+Maintain consistency across related documentation:
+
+```markdown
+monitoring/
+├── Metrics (BEST_PRACTICES.md)
+├── Thresholds (ISSUES.md)
+└── Implementation (DEBUGGING.md)
+```
+
+### 7. Versioning and Changelog
+Each documentation file should maintain its own version history:
+
+```markdown
+## Version History
+
+### v1.0.0 (YYYY-MM-DD)
+- Initial documentation
+- Core concepts and examples
+
+### v1.1.0 (YYYY-MM-DD)
+- Added new features
+- Enhanced existing sections

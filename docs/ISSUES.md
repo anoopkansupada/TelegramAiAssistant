@@ -1,25 +1,3 @@
-// Required Protocol Version
-const LAYER = 158;  // Current MTProto layer version
-
-// Proper connection setup
-const client = new TelegramClient(stringSession, {
-  apiId: process.env.TELEGRAM_API_ID,
-  apiHash: process.env.TELEGRAM_API_HASH,
-  connectionRetries: 5,
-  useWSS: true,
-  baseLogger: new CustomLogger(),
-  floodSleepThreshold: 60,
-});
-```
-
-### Migration Management
-- Handle layer version changes gracefully
-- Implement proper session migration
-- Support both MTProto 1.0 and 2.0
-- Handle server-initiated migration
-
-### Session Storage
-```typescript
 // Secure session storage implementation
 class SecureSessionStorage {
   async store(session: string): Promise<void> {
@@ -367,3 +345,361 @@ class MediaHandler {
      await this.validateSession();
      await this.updateMetrics();
    }, HEALTH_CHECK_INTERVAL);
+   ```
+
+3. Performance Metrics Collection:
+   ```typescript
+   async function analyzeQueryPerformance() {
+     const metrics = await collectQueryMetrics({
+       duration: '1h',
+       minExecutionTime: 100, // ms
+       includeExplain: true
+     });
+
+     console.log('[Performance] Slow queries:',
+       metrics.filter(m => m.executionTime > 200)
+     );
+   }
+   ```
+
+4. Memory Monitoring:
+   ```typescript
+   function monitorMemoryUsage() {
+     const usage = process.memoryUsage();
+     console.log('[Memory] Usage stats:', {
+       heapUsed: usage.heapUsed / 1024 / 1024 + 'MB',
+       heapTotal: usage.heapTotal / 1024 / 1024 + 'MB',
+       external: usage.external / 1024 / 1024 + 'MB',
+       rss: usage.rss / 1024 / 1024 + 'MB'
+     });
+   }
+   ```
+
+5. Network Performance:
+   ```typescript
+   async function analyzeNetworkPerformance() {
+     const metrics = await collectNetworkMetrics({
+       period: '1h',
+       resolution: '1m'
+     });
+
+     console.log('[Network] Performance:', {
+       latency: calculatePercentiles(metrics.latency),
+       throughput: metrics.throughput,
+       errorRate: metrics.errorRate,
+       saturation: metrics.saturation
+     });
+   }
+   ```
+
+6. Session Recovery:
+   ```typescript
+   async function recoverSession(error: SessionError) {
+     console.log('[Recovery] Attempting session recovery');
+
+     // 1. Clear invalid session
+     await clearInvalidSessions();
+
+     // 2. Attempt reconnection
+     await reconnectWithBackoff();
+
+     // 3. Verify new session
+     await verifyNewSession();
+
+     // 4. Restore previous state
+     await restoreApplicationState();
+   }
+   ```
+
+7. State Recovery:
+   ```typescript
+   async function recoverState() {
+     console.log('[Recovery] Initiating state recovery');
+
+     // 1. Cache invalidation
+     await invalidateCache();
+
+     // 2. Reload user data
+     await reloadUserData();
+
+     // 3. Sync Telegram state
+     await syncTelegramState();
+
+     // 4. Verify integrity
+     await verifySystemIntegrity();
+   }
+   ```
+
+8. Metrics Collection:
+   ```typescript
+   class MetricsCollector {
+     private metrics: {
+       wsConnections: number;
+       activeUsers: number;
+       errorRates: Record<string, number>;
+       responseTime: number[];
+     };
+
+     async collectMetrics(): Promise<void> {
+       this.metrics = {
+         wsConnections: await this.countActiveConnections(),
+         activeUsers: await this.countActiveUsers(),
+         errorRates: await this.calculateErrorRates(),
+         responseTime: await this.measureResponseTimes()
+       };
+     }
+   }
+   ```
+
+9. Alert Configuration:
+   ```typescript
+   const alertConfig = {
+     connections: {
+       threshold: 5,
+       period: '5m',
+       action: 'notify'
+     },
+     errors: {
+       threshold: 10,
+       period: '1m',
+       action: 'escalate'
+     },
+     performance: {
+       threshold: 1000, // ms
+       period: '1m',
+       action: 'warn'
+     }
+   };
+   ```
+
+10. Enhanced Logging:
+    ```typescript
+    interface LogEntry {
+      timestamp: string;
+      level: 'debug' | 'info' | 'warn' | 'error';
+      context: string;
+      message: string;
+      data?: Record<string, any>;
+      error?: {
+        message: string;
+        stack?: string;
+        code?: string;
+      };
+    }
+
+    class Logger {
+      log(entry: LogEntry) {
+        const sanitized = this.sanitizeLogData(entry);
+        console.log(JSON.stringify(sanitized));
+      }
+
+      private sanitizeLogData(entry: LogEntry): LogEntry {
+        return {
+          ...entry,
+          data: this.redactSensitiveData(entry.data)
+        };
+      }
+    }
+    ```
+
+11. Error Tracking:
+    ```typescript
+    class ErrorTracker {
+      private errors: Map<string, {
+        count: number;
+        firstSeen: Date;
+        lastSeen: Date;
+        samples: Error[];
+      }>;
+
+      track(error: Error) {
+        const key = this.getErrorKey(error);
+        const entry = this.errors.get(key) || {
+          count: 0,
+          firstSeen: new Date(),
+          lastSeen: new Date(),
+          samples: []
+        };
+
+        entry.count++;
+        entry.lastSeen = new Date();
+        if (entry.samples.length < 5) {
+          entry.samples.push(error);
+        }
+
+        this.errors.set(key, entry);
+      }
+
+      private getErrorKey(error: Error): string {
+        return `${error.name}:${error.message}`;
+      }
+    }
+    ```
+
+## Common Debugging Scenarios
+
+### 1. Connection Issues
+```typescript
+// Scenario: WebSocket connections frequently dropping
+// Debugging steps:
+async function diagnoseConnectionIssues() {
+  // 1. Check current connections
+  const connectionMetrics = await getConnectionMetrics();
+
+  // 2. Analyze error patterns
+  const errorPatterns = await analyzeErrorPatterns();
+
+  // 3. Monitor network stability
+  const networkHealth = await checkNetworkHealth();
+
+  // 4. Generate diagnostic report
+  return {
+    connections: connectionMetrics,
+    errors: errorPatterns,
+    network: networkHealth,
+    recommendations: generateRecommendations()
+  };
+}
+```
+
+### 2. Performance Degradation
+```typescript
+// Scenario: API endpoints becoming slow
+// Debugging steps:
+async function diagnosePerformanceIssues() {
+  // 1. Collect response time metrics
+  const responseMetrics = await collectResponseMetrics();
+
+  // 2. Analyze database queries
+  const queryMetrics = await analyzeQueryPerformance();
+
+  // 3. Check resource utilization
+  const resourceMetrics = await checkResourceUtilization();
+
+  // 4. Generate performance report
+  return {
+    responseTimes: responseMetrics,
+    queries: queryMetrics,
+    resources: resourceMetrics,
+    bottlenecks: identifyBottlenecks()
+  };
+}
+```
+
+### 3. Memory Leaks
+```typescript
+// Scenario: Increasing memory usage over time
+// Debugging steps:
+async function diagnoseMemoryIssues() {
+  // 1. Take heap snapshot
+  const heapSnapshot = await takeHeapSnapshot();
+
+  // 2. Analyze object retention
+  const retentionPatterns = analyzeObjectRetention(heapSnapshot);
+
+  // 3. Track garbage collection
+  const gcMetrics = await trackGarbageCollection();
+
+  // 4. Generate memory report
+  return {
+    snapshot: summarizeHeapSnapshot(heapSnapshot),
+    retention: retentionPatterns,
+    gc: gcMetrics,
+    recommendations: generateMemoryRecommendations()
+  };
+}
+```
+
+## Response Time Thresholds
+```typescript
+const responseTimeThresholds = {
+  api: {
+    p95: 500, // 95th percentile should be under 500ms
+    p99: 1000, // 99th percentile should be under 1s
+    max: 2000 // No request should take more than 2s
+  },
+  database: {
+    queryTime: 100, // Most queries should complete within 100ms
+    transactionTime: 500 // Transactions should complete within 500ms
+  },
+  websocket: {
+    messageLatency: 100, // Message delivery should be under 100ms
+    reconnectTime: 1000 // Reconnection should happen within 1s
+  }
+};
+```
+
+## Resource Thresholds
+```typescript
+const resourceThresholds = {
+  memory: {
+    warning: 0.7, // 70% usage triggers warning
+    critical: 0.85 // 85% usage triggers critical alert
+  },
+  cpu: {
+    warning: 0.6, // 60% usage triggers warning
+    critical: 0.8 // 80% usage triggers critical alert
+  },
+  storage: {
+    warning: 0.8, // 80% usage triggers warning
+    critical: 0.9 // 90% usage triggers critical alert
+  }
+};
+```
+
+## Error Rate Thresholds
+```typescript
+const errorRateThresholds = {
+  api: {
+    warning: 0.01, // 1% error rate triggers warning
+    critical: 0.05 // 5% error rate triggers critical alert
+  },
+  websocket: {
+    disconnectRate: 0.1, // 10% disconnect rate triggers warning
+    errorRate: 0.05 // 5% message error rate triggers warning
+  },
+  telegram: {
+    authFailure: 0.1, // 10% auth failure rate triggers warning
+    messageFailure: 0.05 // 5% message failure rate triggers warning
+  }
+};
+```
+
+## Connection Pool Thresholds
+```typescript
+const connectionPoolThresholds = {
+  database: {
+    maxSize: 20,
+    minAvailable: 2,
+    maxWaitingClients: 10
+  },
+  websocket: {
+    maxConnectionsPerUser: 3,
+    maxTotalConnections: 1000,
+    maxConnectionRate: 100 // per minute
+  }
+};
+```
+
+## Alerting Matrix
+```typescript
+const alertingMatrix = {
+  high: {
+    channels: ['slack', 'email'],
+    escalation: true,
+    retryInterval: 5 * 60 * 1000, // 5 minutes
+    maxRetries: 3
+  },
+  medium: {
+    channels: ['slack'],
+    escalation: false,
+    retryInterval: 15 * 60 * 1000, // 15 minutes
+    maxRetries: 2
+  },
+  low: {
+    channels: ['logs'],
+    escalation: false,
+    retryInterval: 60 * 60 * 1000, // 1 hour
+    maxRetries: 1
+  }
+};

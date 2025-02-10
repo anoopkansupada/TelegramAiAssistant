@@ -1,5 +1,3 @@
-### Performance Metrics
-```typescript
 interface WebSocketMetrics {
   messageLatency: number[];
   messageRate: number;

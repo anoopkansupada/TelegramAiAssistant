@@ -1,25 +1,4 @@
-// Use Drizzle query builder with proper type safety
-const user = await db.query.users.findFirst({
-  where: eq(users.id, id),
-  with: {
-    contacts: true
-  }
-});
-
-// Batch operations for better performance
-const batchSize = 100;
-for (let i = 0; i < items.length; i += batchSize) {
-  const batch = items.slice(i, i + batchSize);
-  await db.insert(table).values(batch);
-}
-
-// Use transactions for related operations
-await db.transaction(async (tx) => {
-  const user = await tx.insert(users).values(userData);
-  await tx.insert(userSettings).values({ userId: user.id, ...settings });
-});
-```
-
+```typescript
 ### Connection Management
 ```typescript
 // Use connection pooling with proper limits
@@ -39,6 +18,7 @@ process.on('SIGTERM', cleanup);
 process.on('SIGINT', cleanup);
 ```
 
+```typescript
 ## 2. Telegram Integration
 
 ### Session Management
@@ -85,6 +65,7 @@ class TelegramSessionManager {
 }
 ```
 
+```typescript
 ### Error Handling and Rate Limiting
 ```typescript
 class TelegramRateLimiter {
@@ -126,6 +107,7 @@ class TelegramRateLimiter {
 }
 ```
 
+```typescript
 ### Media Handling
 ```typescript
 class MediaUploadManager {
@@ -157,6 +139,7 @@ class MediaUploadManager {
 }
 ```
 
+```typescript
 ## 3. WebSocket Communication
 
 ### Connection Management
@@ -216,6 +199,7 @@ class WebSocketManager {
 }
 ```
 
+```typescript
 ## 4. Security Best Practices
 
 ### Authentication
@@ -232,7 +216,7 @@ async function hashPassword(password: string): Promise<string> {
 // Token generation with proper expiration
 function generateToken(user: User): string {
   return jwt.sign(
-    { 
+    {
       userId: user.id,
       version: user.tokenVersion // For invalidating all tokens
     },
@@ -254,6 +238,7 @@ const requestSchema = z.object({
 });
 ```
 
+```typescript
 ### Data Protection
 ```typescript
 class DataProtection {
@@ -280,6 +265,7 @@ class DataProtection {
 }
 ```
 
+```typescript
 ## 5. Performance Optimization
 
 ### Caching Strategy
@@ -317,6 +303,7 @@ class CacheManager {
 }
 ```
 
+```typescript
 ### Resource Management
 ```typescript
 class ResourceManager {
@@ -359,6 +346,7 @@ class ResourceManager {
 }
 ```
 
+```typescript
 ## 6. Testing Guidelines
 
 ### Unit Testing
@@ -390,6 +378,7 @@ describe('TelegramSessionManager', () => {
 });
 ```
 
+```typescript
 ### Integration Testing
 ```typescript
 describe('Telegram Integration', () => {
@@ -398,7 +387,7 @@ describe('Telegram Integration', () => {
     const chatId = '123456789';
 
     const responses = await Promise.all(
-      Array(10).fill(null).map(() => 
+      Array(10).fill(null).map(() =>
         telegramClient.sendMessage(chatId, message)
       )
     );
@@ -419,6 +408,7 @@ describe('Telegram Integration', () => {
 });
 ```
 
+```typescript
 Remember to:
 - Write tests for both success and failure scenarios
 - Mock external dependencies
@@ -463,5 +453,117 @@ const metrics = {
   async report(): Promise<void> {
     const data = await this.collect();
     logger.info('System metrics', { metrics: data });
+  }
+};
+```
+
+```typescript
+## 8. Monitoring and Observability
+```typescript
+// Set up structured logging with context
+const logger = {
+  info(message: string, meta?: object) {
+    console.log(JSON.stringify({
+      level: 'info',
+      message,
+      timestamp: new Date().toISOString(),
+      ...meta,
+      environment: process.env.NODE_ENV,
+      version: process.env.APP_VERSION
+    }));
+  },
+  error(error: Error, meta?: object) {
+    console.error(JSON.stringify({
+      level: 'error',
+      message: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+      ...meta,
+      environment: process.env.NODE_ENV,
+      version: process.env.APP_VERSION
+    }));
+  }
+};
+
+// Implement health check endpoints
+app.get('/health', async (req, res) => {
+  const health = {
+    uptime: process.uptime(),
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    memoryUsage: process.memoryUsage(),
+    version: process.env.APP_VERSION
+  };
+  res.json(health);
+});
+
+// Track performance metrics
+const metrics = {
+  requests: new Map<string, number>(),
+  latencies: new Map<string, number[]>(),
+  errors: new Map<string, number>(),
+
+  trackRequest(path: string) {
+    const current = this.requests.get(path) || 0;
+    this.requests.set(path, current + 1);
+  },
+
+  trackLatency(path: string, duration: number) {
+    const latencies = this.latencies.get(path) || [];
+    latencies.push(duration);
+    this.latencies.set(path, latencies.slice(-100)); // Keep last 100 samples
+  },
+
+  trackError(path: string) {
+    const current = this.errors.get(path) || 0;
+    this.errors.set(path, current + 1);
+  }
+};
+
+## 9. Documentation Maintenance
+
+### Documentation Synchronization
+```typescript
+// Keep threshold definitions consistent across files
+// Reference: See ISSUES.md#response-time-thresholds
+const monitoringThresholds = {
+  api: {
+    responseTime: responseTimeThresholds.api,
+    errorRate: errorRateThresholds.api
+  },
+  websocket: {
+    messageLatency: responseTimeThresholds.websocket,
+    connectionPool: connectionPoolThresholds.websocket
+  }
+};
+
+// Implement monitoring based on documented thresholds
+class PerformanceMonitor {
+  async checkThresholds(): Promise<void> {
+    const metrics = await this.collectMetrics();
+
+    // Use centrally defined thresholds
+    if (metrics.responseTime > monitoringThresholds.api.responseTime.p95) {
+      await this.triggerAlert('response_time_exceeded', {
+        current: metrics.responseTime,
+        threshold: monitoringThresholds.api.responseTime.p95
+      });
+    }
+  }
+}
+```
+
+### Cross-Reference Management
+```typescript
+// Keep documentation references updated
+const docReferences = {
+  monitoring: {
+    thresholds: 'ISSUES.md#response-time-thresholds',
+    implementation: 'DEBUGGING.md#monitoring-metrics',
+    bestPractices: 'BEST_PRACTICES.md#monitoring-and-observability'
+  },
+  security: {
+    authentication: 'AUTHENTICATION.md#security-best-practices',
+    dataProtection: 'BEST_PRACTICES.md#data-protection'
   }
 };

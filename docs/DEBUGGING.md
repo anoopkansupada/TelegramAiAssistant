@@ -1,29 +1,3 @@
-# Debugging Guide
-
-## Comprehensive System Analysis Approach
-
-### 1. Connection Layer Analysis
-- Monitor WebSocket connections
-- Check Telegram session status
-- Verify database connectivity
-- Validate API authentication
-
-### 2. Data Flow Tracking
-- Follow request/response cycles
-- Monitor state changes
-- Track data synchronization
-- Verify cache consistency
-
-### 3. Logging Strategy
-- Use structured logging
-- Implement proper error context
-- Track timing and performance
-- Monitor resource usage
-
-## Common Issues and Solutions
-
-### 1. Authentication Problems
-```typescript
 // Check session status
 const sessionStatus = await checkSession();
 if (!sessionStatus.valid) {
@@ -70,14 +44,14 @@ async function verifyDatabaseIntegrity() {
 
 ### 2. State Inspector
 - Current authentication state
-- Active subscriptions
+- Active subscriptions 
 - Cached data status
 - Pending operations
 
 ### 3. Performance Metrics
 - Response times
 - Resource usage
-- Error rates
+- Error rates 
 - Cache hit rates
 
 ## Debug Process Flow
@@ -143,7 +117,7 @@ function verifyState(state: AppState) {
     checkConnections(state.connections),
     checkCache(state.cache)
   ];
-  
+
   return Promise.all(checks);
 }
 ```
@@ -221,6 +195,3 @@ async function handleRecovery(error: SystemError) {
   await attemptAutoRecovery(error);
   await verifySystemState();
 }
-```
-
-Remember: Always approach debugging systematically and maintain comprehensive logs for future reference.

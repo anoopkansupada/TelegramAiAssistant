@@ -1,31 +1,55 @@
-# API Documentation
+POST /api/register
+- Description: Register new user
+- Authentication: Not required
+- Request Body: { username: string, password: string }
+- Response: User object
 
-## Overview
-Documentation for the Telegram CRM Platform API endpoints.
+POST /api/login
+- Description: Login user
+- Authentication: Not required
+- Request Body: { username: string, password: string }
+- Response: User object
 
-## Authentication
-All API endpoints require authentication unless specified otherwise.
+POST /api/logout
+- Description: Logout current user
+- Authentication: Required
+- Response: 200 OK
 
-### Endpoints
-
-#### User Management
-```
 GET /api/user
 - Description: Get current user information
 - Authentication: Required
 - Response: User object
 ```
 
-#### Telegram Integration
+### Telegram Integration
+
 ```
-POST /api/telegram/connect
-- Description: Connect Telegram account
+POST /api/telegram-auth/request-code
+- Description: Request Telegram verification code
 - Authentication: Required
-- Request Body: { telegramId: string }
-- Response: Connection status
+- Request Body: { phoneNumber: string }
+- Response: { success: boolean, message: string }
+
+POST /api/telegram-auth/verify
+- Description: Verify Telegram code
+- Authentication: Required
+- Request Body: { code: string }
+- Response: { success: boolean }
+
+POST /api/telegram-auth/verify-2fa
+- Description: Verify 2FA token
+- Authentication: Required
+- Request Body: { token: string }
+- Response: { success: boolean, message: string }
+
+GET /api/telegram-auth/status
+- Description: Check Telegram connection status
+- Authentication: Required
+- Response: { connected: boolean, user?: { id: string, username: string, firstName?: string } }
 ```
 
-#### CRM Features
+### CRM Features
+
 ```
 GET /api/contacts
 - Description: Get all contacts
@@ -48,6 +72,27 @@ POST /api/companies
 - Authentication: Required
 - Request Body: Company object
 - Response: Created company
+
+GET /api/telegram-channels
+- Description: Get all Telegram channels
+- Authentication: Required
+- Response: Array of channel objects
+
+POST /api/test/telegram-message
+- Description: Test message processing
+- Authentication: Required
+- Request Body: { message: string }
+- Response: { message: object, suggestions: string[], contact: object }
+```
+
+### WebSocket Endpoints
+
+```
+WebSocket /ws/status
+- Description: Real-time connection status updates
+- Authentication: Required via session
+- Messages:
+  - Server -> Client: { type: 'status', connected: boolean, user?: object, lastChecked: string }
 ```
 
 ## Error Handling
@@ -59,10 +104,9 @@ All endpoints follow standard HTTP status codes:
 - 404: Not Found
 - 500: Internal Server Error
 
-## Rate Limiting
-- 100 requests per minute per IP
-- 1000 requests per hour per user
-
-## Versioning
-Current API version: v1
-Base URL: `/api/v1`
+Common error responses:
+```json
+{
+  "message": "Error description",
+  "code": "ERROR_CODE" // Optional error code
+}

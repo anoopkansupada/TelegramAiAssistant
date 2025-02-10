@@ -1,17 +1,8 @@
-# Database Schema Documentation
-
-## Overview
-This document outlines the database schema for the Telegram CRM Platform.
-
-## Tables
-
-### Users
-```sql
 Table users {
-  id uuid [pk]
-  email text [unique, not null]
-  passwordHash text [not null]
-  fullName text
+  id serial [pk]
+  username text [unique, not null]
+  password text [not null]
+  twoFactorSecret text
   createdAt timestamp [default: `now()`]
 }
 ```
@@ -19,10 +10,11 @@ Table users {
 ### Companies
 ```sql
 Table companies {
-  id uuid [pk]
+  id serial [pk]
   name text [not null]
   website text
   industry text
+  createdById integer [ref: > users.id]
   createdAt timestamp [default: `now()`]
 }
 ```
@@ -30,13 +22,13 @@ Table companies {
 ### Contacts
 ```sql
 Table contacts {
-  id uuid [pk]
-  companyId uuid [ref: > companies.id]
+  id serial [pk]
+  companyId integer [ref: > companies.id]
   telegramId text [unique]
   firstName text
   lastName text
-  email text
-  position text
+  jobTitle text
+  createdById integer [ref: > users.id]
   createdAt timestamp [default: `now()`]
 }
 ```
@@ -44,38 +36,149 @@ Table contacts {
 ### Messages
 ```sql
 Table messages {
-  id uuid [pk]
-  contactId uuid [ref: > contacts.id]
+  id serial [pk]
+  contactId integer [ref: > contacts.id]
   content text [not null]
-  direction text [not null] // 'incoming' or 'outgoing'
-  timestamp timestamp [default: `now()`]
+  sentiment text
+  createdAt timestamp [default: `now()`]
 }
 ```
 
-### Interactions
+### MessageSuggestions
 ```sql
-Table interactions {
-  id uuid [pk]
-  contactId uuid [ref: > contacts.id]
-  type text [not null] // 'meeting', 'call', 'email', etc.
-  notes text
-  timestamp timestamp [default: `now()`]
+Table messageSuggestions {
+  id serial [pk]
+  messageId integer [ref: > messages.id]
+  suggestion text [not null]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### TelegramChannels
+```sql
+Table telegramChannels {
+  id serial [pk]
+  telegramId text [unique, not null]
+  name text [not null]
+  type text [not null]
+  createdById integer [ref: > users.id]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### ChannelInvitations
+```sql
+Table channelInvitations {
+  id serial [pk]
+  channelId integer [ref: > telegramChannels.id]
+  inviteLink text [not null]
+  maxUses integer
+  expireDate timestamp
+  status text [not null]
+  createdById integer [ref: > users.id]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### TelegramChats
+```sql
+Table telegramChats {
+  id serial [pk]
+  telegramId text [unique, not null]
+  type text [not null]
+  title text
+  status text [not null]
+  unreadCount integer [default: 0]
+  category text
+  importance integer [default: 0]
+  metadata jsonb
+  createdById integer [ref: > users.id]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### CompanySuggestions
+```sql
+Table companySuggestions {
+  id serial [pk]
+  chatId integer [ref: > telegramChats.id]
+  companyName text [not null]
+  confidenceScore float [not null]
+  confidenceFactors jsonb
+  status text [not null]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### TelegramSessions
+```sql
+Table telegramSessions {
+  id serial [pk]
+  userId integer [ref: > users.id]
+  session text [not null]
+  isActive boolean [default: true]
+  lastUsed timestamp [default: `now()`]
+  lastAuthDate timestamp [default: `now()`]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### FollowupSchedules
+```sql
+Table followupSchedules {
+  id serial [pk]
+  chatId integer [ref: > telegramChats.id]
+  message text [not null]
+  scheduledFor timestamp [not null]
+  status text [not null]
+  createdById integer [ref: > users.id]
+  createdAt timestamp [default: `now()`]
 }
 ```
 
 ## Relationships
-- Each contact belongs to one company
-- Each message belongs to one contact
-- Each interaction belongs to one contact
+1. Users:
+   - One-to-many with Companies (creator)
+   - One-to-many with Contacts (creator)
+   - One-to-many with TelegramChannels (creator)
+   - One-to-many with TelegramSessions
+
+2. Companies:
+   - One-to-many with Contacts
+   - Created by one User
+
+3. Contacts:
+   - Belongs to one Company
+   - One-to-many with Messages
+   - Created by one User
+
+4. Messages:
+   - Belongs to one Contact
+   - One-to-many with MessageSuggestions
+
+5. TelegramChannels:
+   - One-to-many with ChannelInvitations
+   - Created by one User
+
+6. TelegramChats:
+   - One-to-many with CompanySuggestions
+   - One-to-many with FollowupSchedules
+   - Created by one User
 
 ## Indexes
-- companies(name)
-- contacts(telegramId)
-- contacts(email)
-- messages(contactId, timestamp)
-- interactions(contactId, timestamp)
+```sql
+-- Performance indexes
+CREATE INDEX idx_contacts_telegram_id ON contacts(telegramId);
+CREATE INDEX idx_messages_contact_id ON messages(contactId);
+CREATE INDEX idx_message_suggestions_message_id ON messageSuggestions(messageId);
+CREATE INDEX idx_telegram_channels_telegram_id ON telegramChannels(telegramId);
+CREATE INDEX idx_telegram_chats_telegram_id ON telegramChats(telegramId);
+CREATE INDEX idx_company_suggestions_chat_id ON companySuggestions(chatId);
+CREATE INDEX idx_followup_schedules_chat_id ON followupSchedules(chatId);
+CREATE INDEX idx_telegram_sessions_user_id ON telegramSessions(userId);
 
-## Notes
-- All IDs are UUIDs
-- Timestamps are automatically set
-- Foreign key constraints are enforced
+-- Composite indexes for common queries
+CREATE INDEX idx_messages_contact_created ON messages(contactId, createdAt DESC);
+CREATE INDEX idx_telegram_chats_category_importance ON telegramChats(category, importance);
+CREATE INDEX idx_company_suggestions_status_confidence ON companySuggestions(status, confidenceScore DESC);
+CREATE INDEX idx_followup_schedules_status_date ON followupSchedules(status, scheduledFor);

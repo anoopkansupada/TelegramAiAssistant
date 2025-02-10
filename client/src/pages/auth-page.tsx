@@ -15,6 +15,10 @@ export default function AuthPage() {
 
   const loginForm = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
+    defaultValues: {
+      username: "admin",
+      password: "admin"
+    }
   });
 
   const registerForm = useForm<InsertUser>({
@@ -44,7 +48,7 @@ export default function AuthPage() {
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="login">
                 <Form {...loginForm}>
                   <form onSubmit={loginForm.handleSubmit(data => loginMutation.mutate(data))} className="space-y-4">
@@ -75,7 +79,7 @@ export default function AuthPage() {
                       )}
                     />
                     <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-                      Login
+                      {loginMutation.isPending ? "Logging in..." : "Login"}
                     </Button>
                   </form>
                 </Form>
@@ -111,7 +115,7 @@ export default function AuthPage() {
                       )}
                     />
                     <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
-                      Register
+                      {registerMutation.isPending ? "Registering..." : "Register"}
                     </Button>
                   </form>
                 </Form>

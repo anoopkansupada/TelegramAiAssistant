@@ -1,5 +1,6 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
+import type { PgTable, PgTransaction } from 'drizzle-orm/pg-core';
 import ws from "ws";
 import * as schema from "@shared/schema";
 
@@ -19,7 +20,7 @@ pool.on('error', (err, client) => {
 });
 
 // Create the Drizzle instance
-export const db = drizzle(pool, { schema });
+const db = drizzle(pool, { schema });
 
 // Wrapper function for retrying database operations
 async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
@@ -56,22 +57,89 @@ async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promis
 
 // Export db with retry wrapper
 export const dbWithRetry = {
+  // Pass through the raw drizzle instance
   ...db,
-  query: async (...args: Parameters<typeof db.query>) => {
-    return withRetry(() => db.query(...args));
+
+  // Override query methods with retry wrapper
+  query: {
+    ...db.query,
+    execute: async <T>(queryBuilder: { execute: () => Promise<T> }) => {
+      return withRetry(() => queryBuilder.execute());
+    }
   },
-  insert: async (...args: Parameters<typeof db.insert>) => {
-    return withRetry(() => db.insert(...args));
+
+  // Wrap insert operations with proper types
+  insert: <T extends PgTable>(table: T) => {
+    const baseInsert = db.insert(table);
+    return {
+      ...baseInsert,
+      values: (values: Parameters<typeof baseInsert.values>[0]) => ({
+        returning: () => ({
+          execute: async () => {
+            return withRetry(() => 
+              baseInsert.values(values).returning().execute()
+            );
+          }
+        })
+      })
+    };
   },
-  update: async (...args: Parameters<typeof db.update>) => {
-    return withRetry(() => db.update(...args));
+
+  // Wrap update operations with proper types
+  update: <T extends PgTable>(table: T) => {
+    const baseUpdate = db.update(table);
+    return {
+      ...baseUpdate,
+      set: (values: Parameters<typeof baseUpdate.set>[0]) => ({
+        where: (condition?: Parameters<typeof baseUpdate.where>[0]) => ({
+          returning: () => ({
+            execute: async () => {
+              const query = baseUpdate.set(values);
+              if (condition) {
+                return withRetry(() => 
+                  query.where(condition).returning().execute()
+                );
+              }
+              return withRetry(() => 
+                query.returning().execute()
+              );
+            }
+          })
+        })
+      })
+    };
   },
-  delete: async (...args: Parameters<typeof db.delete>) => {
-    return withRetry(() => db.delete(...args));
+
+  // Wrap delete operations with proper types
+  delete: <T extends PgTable>(table: T) => {
+    const baseDelete = db.delete(table);
+    return {
+      ...baseDelete,
+      where: (condition?: Parameters<typeof baseDelete.where>[0]) => ({
+        returning: () => ({
+          execute: async () => {
+            const query = baseDelete;
+            if (condition) {
+              return withRetry(() => 
+                query.where(condition).returning().execute()
+              );
+            }
+            return withRetry(() => 
+              query.returning().execute()
+            );
+          }
+        })
+      })
+    };
   },
-  transaction: async (...args: Parameters<typeof db.transaction>) => {
-    return withRetry(() => db.transaction(...args));
+
+  // Wrap transaction operations with proper types
+  transaction: async <T>(
+    callback: (tx: PgTransaction<typeof schema>) => Promise<T>
+  ): Promise<T> => {
+    return withRetry(() => db.transaction(callback));
   }
 };
 
+// Export the database instance with retry wrapper
 export { dbWithRetry as db };

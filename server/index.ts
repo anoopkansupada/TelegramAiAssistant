@@ -16,14 +16,7 @@ import { TelegramPool } from "./telegram/pool";
 import { registerRoutes } from "./routes";
 
 // Configure detailed logging
-const logger = new CustomLogger("[TelegramAuth]", {
-  level: "debug",
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-  handlers: [
-    { type: "file", filename: "debug.log" },
-    { type: "console" }
-  ]
-});
+const logger = new CustomLogger("[TelegramAuth]");
 
 // Enable Telegram's internal debug logging
 logger.debug("Initializing Telegram debug logging");
@@ -66,8 +59,7 @@ async function initializeTelegramClient(attempt = 1): Promise<TelegramClient | n
       const health = await validateTelegramSession(client);
 
       if (health.isValid) {
-        logger.info("🟢 Phase 4: DC routing table initialization");
-        logger.info("✅ Successfully connected to Telegram!", {
+        logger.info("🟢 Phase 4: DC routing table initialization", {
           dcId: health.dcId,
           layer: health.layer,
           latency: health.latency
@@ -175,7 +167,7 @@ async function startServer() {
     });
 
     if (process.env.NODE_ENV === "development") {
-      await setupVite(app);
+      await setupVite(app, server);
     } else {
       serveStatic(app);
     }

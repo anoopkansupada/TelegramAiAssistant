@@ -18,15 +18,28 @@ async function attemptSessionRecovery(userId: number): Promise<boolean> {
     try {
       // Use the improved client manager to attempt connection
       const client = await clientManager.getClient(userId);
+
+      // Enhanced session validation
+      const startTime = Date.now();
       const me = await client.getMe();
+      const connectionTime = Date.now() - startTime;
 
       if (me) {
         await storage.updateTelegramSession(telegramSession.id, {
           lastUsed: new Date(),
           isActive: true,
-          retryCount: 0
+          retryCount: 0,
+          metadata: {
+            ...(telegramSession.metadata ?? {}),
+            lastConnectionTime: connectionTime,
+            lastSuccessfulRecovery: new Date().toISOString()
+          }
         });
-        logger.info('Successfully recovered session', { userId });
+        logger.info('Successfully recovered session', { 
+          userId,
+          connectionTime,
+          username: me.username
+        });
         return true;
       }
 
@@ -44,8 +57,12 @@ async function attemptSessionRecovery(userId: number): Promise<boolean> {
         const retryAfter = error.seconds || 30;
         logger.warn('Rate limited, need to wait', { retryAfter });
         await storage.updateTelegramSession(telegramSession.id, {
-          retryCount: telegramSession.retryCount ?? 0 + 1,
-          metadata: { ...(telegramSession.metadata ?? {}), lastFloodWait: retryAfter }
+          retryCount: (telegramSession.retryCount ?? 0) + 1,
+          metadata: { 
+            ...(telegramSession.metadata ?? {}), 
+            lastFloodWait: retryAfter,
+            lastFloodWaitTime: new Date().toISOString()
+          }
         });
         return false;
       }
@@ -93,10 +110,14 @@ export async function requireTelegramAuth(
         throw new Error('Invalid session state');
       }
 
-      // Update last activity
+      // Update last activity and metadata
       if (telegramSession) {
         await storage.updateTelegramSession(telegramSession.id, {
-          lastUsed: new Date()
+          lastUsed: new Date(),
+          metadata: {
+            ...(telegramSession.metadata ?? {}),
+            lastSuccessfulAuth: new Date().toISOString()
+          }
         });
       }
 

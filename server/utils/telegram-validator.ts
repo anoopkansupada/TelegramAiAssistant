@@ -16,10 +16,10 @@ export interface SessionHealth {
 export async function validateTelegramSession(client: TelegramClient): Promise<SessionHealth> {
   try {
     const startTime = Date.now();
-    
+
     // Basic connection test
     await client.connect();
-    
+
     // Authorization check
     const me = await client.getMe();
     if (!me) {
@@ -49,7 +49,7 @@ export async function validateTelegramSession(client: TelegramClient): Promise<S
     const health: SessionHealth = {
       isValid: true,
       dcId: nearestDc.thisDc,
-      layer: config.layer,
+      layer: config.apiLayer, 
       lastActivity: new Date(),
       latency,
     };
@@ -77,22 +77,22 @@ export function isDcMigrationError(error: any): boolean {
 
 export function extractWaitTime(error: any): number {
   if (!isFloodError(error)) return 0;
-  
+
   const matches = error.message.match(/FLOOD_WAIT_(\d+)/);
   if (matches && matches[1]) {
     return parseInt(matches[1], 10);
   }
-  
-  return error.seconds || 60; // Default to 60 seconds if no specific time found
+
+  return error.seconds || 60; 
 }
 
 export function extractDcId(error: any): number | null {
   if (!isDcMigrationError(error)) return null;
-  
+
   const matches = error.message.match(/MIGRATE_(\d+)/);
   if (matches && matches[1]) {
     return parseInt(matches[1], 10);
   }
-  
+
   return null;
 }

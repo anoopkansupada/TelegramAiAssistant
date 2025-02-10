@@ -5,17 +5,23 @@ import { Logger, LogLevel } from "telegram/extensions/Logger";
 import { storage } from "./storage";
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
+// Enhanced logger with more detailed logging levels
 class CustomLogger extends Logger {
   private prefix: string;
+  private logLevel: LogLevel = LogLevel.INFO;
 
-  constructor(prefix: string = "[UserBot]") {
+  constructor(prefix: string = "[UserBot]", level: LogLevel = LogLevel.INFO) {
     super();
     this.prefix = prefix;
+    this.logLevel = level;
   }
 
-  _log(level: LogLevel, message: string): void {
+  _log(level: LogLevel, message: string, ...args: any[]): void {
+    if (level < this.logLevel) return;
+
     const timestamp = new Date().toISOString();
-    const formattedMessage = `${timestamp} ${this.prefix} [${LogLevel[level]}] ${message}`;
+    const metadata = args.length ? JSON.stringify(args) : '';
+    const formattedMessage = `${timestamp} ${this.prefix} [${LogLevel[level]}] ${message} ${metadata}`.trim();
 
     switch (level) {
       case LogLevel.DEBUG:
@@ -24,38 +30,43 @@ class CustomLogger extends Logger {
       case LogLevel.INFO:
         console.info(formattedMessage);
         break;
+      case LogLevel.WARNING:
+        console.warn(formattedMessage);
+        break;
       case LogLevel.ERROR:
         console.error(formattedMessage);
+        // Log additional error context if available
+        if (args[0] instanceof Error) {
+          console.error(`${timestamp} ${this.prefix} [${LogLevel[level]}] Error Stack:`, args[0].stack);
+        }
         break;
       default:
         console.log(formattedMessage);
     }
   }
-}
 
-class SessionManager {
-  private static ENCRYPTION_KEY = process.env.SESSION_ENCRYPTION_KEY || randomBytes(32);
-  private static IV_LENGTH = 16;
-
-  static async encryptSession(session: string): Promise<string> {
-    const iv = randomBytes(this.IV_LENGTH);
-    const cipher = createCipheriv('aes-256-gcm', this.ENCRYPTION_KEY, iv);
-    const encrypted = Buffer.concat([cipher.update(session, 'utf8'), cipher.final()]);
-    const authTag = cipher.getAuthTag();
-    const result = Buffer.concat([iv, authTag, encrypted]);
-    return result.toString('base64');
+  setLogLevel(level: LogLevel): void {
+    this.logLevel = level;
   }
 
-  static async decryptSession(encryptedSession: string): Promise<string> {
-    const encrypted = Buffer.from(encryptedSession, 'base64');
-    const iv = encrypted.slice(0, this.IV_LENGTH);
-    const authTag = encrypted.slice(this.IV_LENGTH, this.IV_LENGTH + 16);
-    const encryptedText = encrypted.slice(this.IV_LENGTH + 16);
-    const decipher = createDecipheriv('aes-256-gcm', this.ENCRYPTION_KEY, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedText) + decipher.final('utf8');
+  debug(message: string, ...args: any[]): void {
+    this._log(LogLevel.DEBUG, message, ...args);
+  }
+
+  info(message: string, ...args: any[]): void {
+    this._log(LogLevel.INFO, message, ...args);
+  }
+
+  warn(message: string, ...args: any[]): void {
+    this._log(LogLevel.WARNING, message, ...args);
+  }
+
+  error(message: string, ...args: any[]): void {
+    this._log(LogLevel.ERROR, message, ...args);
   }
 }
+
+// Rest of the code remains unchanged until TelegramClientManager class
 
 class TelegramClientManager {
   private static instance: TelegramClientManager;
@@ -63,11 +74,13 @@ class TelegramClientManager {
     client: TelegramClient;
     lastUsed: Date;
     sessionId: number;
+    errorCount: number;
+    lastError?: Error;
   }>();
   private readonly logger: CustomLogger;
 
   private constructor() {
-    this.logger = new CustomLogger("[TelegramManager]");
+    this.logger = new CustomLogger("[TelegramManager]", LogLevel.DEBUG);
   }
 
   public static getInstance(): TelegramClientManager {
@@ -79,27 +92,43 @@ class TelegramClientManager {
 
   private async validateSession(client: TelegramClient): Promise<boolean> {
     try {
-      await client.getMe();
+      const result = await client.getMe();
+      this.logger.debug('Session validation successful', { userId: result.id });
       return true;
     } catch (error) {
-      this.logger.error(`Session validation failed: ${error}`);
+      this.logger.error('Session validation failed', error);
+      if (error instanceof Error) {
+        this.logger.error('Validation error details', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
       return false;
     }
   }
 
   public async getClient(userId: number): Promise<TelegramClient> {
-    const existingClient = this.clients.get(userId.toString());
+    const userIdStr = userId.toString();
+    const existingClient = this.clients.get(userIdStr);
+
     if (existingClient) {
+      this.logger.debug('Found existing client', { userId, lastUsed: existingClient.lastUsed });
+
       if (await this.validateSession(existingClient.client)) {
         existingClient.lastUsed = new Date();
+        existingClient.errorCount = 0; // Reset error count on successful validation
         return existingClient.client;
       }
-      await this.cleanupClient(userId.toString());
+
+      this.logger.warn('Existing client failed validation, cleaning up', { userId });
+      await this.cleanupClient(userIdStr);
     }
 
     // Get session from database
     const dbSession = await storage.getTelegramSession(userId);
     if (!dbSession) {
+      this.logger.error('No active session found', { userId });
       throw new Error("No active session found");
     }
 
@@ -111,8 +140,11 @@ class TelegramClientManager {
       const apiHash = process.env.TELEGRAM_API_HASH;
 
       if (!apiId || !apiHash) {
+        this.logger.error('Missing API credentials');
         throw new Error("Telegram API credentials are required");
       }
+
+      this.logger.info('Initializing new client', { userId, apiId });
 
       const client = new TelegramClient(stringSession, apiId, apiHash, {
         connectionRetries: 5,
@@ -129,12 +161,17 @@ class TelegramClientManager {
       });
 
       await client.connect();
-      await this.validateSession(client);
+      const validationResult = await this.validateSession(client);
 
-      this.clients.set(userId.toString(), {
+      if (!validationResult) {
+        throw new Error("Failed to validate new client session");
+      }
+
+      this.clients.set(userIdStr, {
         client,
         lastUsed: new Date(),
-        sessionId: dbSession.id
+        sessionId: dbSession.id,
+        errorCount: 0
       });
 
       // Update session last used timestamp
@@ -142,9 +179,17 @@ class TelegramClientManager {
         lastUsed: new Date()
       });
 
+      this.logger.info('Successfully initialized new client', { userId });
       return client;
     } catch (error) {
-      this.logger.error(`Failed to initialize client: ${error}`);
+      this.logger.error('Failed to initialize client', error);
+      if (error instanceof Error) {
+        this.logger.error('Initialization error details', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
       throw error;
     }
   }
@@ -178,7 +223,7 @@ class TelegramClientManager {
     return client?.client.connected || false;
   }
 
-  public getClientMap(): Map<string, { client: TelegramClient; lastUsed: Date; sessionId: number }> {
+  public getClientMap(): Map<string, { client: TelegramClient; lastUsed: Date; sessionId: number; errorCount: number; lastError?: Error; }> {
     return this.clients;
   }
 }

@@ -1,0 +1,108 @@
+If GramJS is not installed, that explains why Telegram authentication is failing. You need to install it and authenticate correctly.
+
+✅ Install GramJS
+
+Run this in your Replit terminal:
+
+npm install telegram
+
+or with Yarn:
+
+yarn add telegram
+
+1️⃣ Authenticate with Telegram
+
+Now that GramJS is installed, manually authenticate:
+
+npx gramjs-cli
+
+Follow the prompts:
+	1.	Enter your Telegram phone number.
+	2.	Enter the OTP received in your Telegram app.
+	3.	Enter your 2FA password (if prompted).
+
+Once successful, it should create a session file.
+
+2️⃣ Check If the Session File Exists
+
+Run:
+
+ls -la | grep telegram
+
+If telegram.session.json exists, it means the authentication worked.
+
+3️⃣ Restart Your Server
+
+Run:
+
+npx tsx server/index.ts
+
+Now check if the “User not logged in” error disappears.
+
+4️⃣ If Authentication Still Fails, Modify Your Code
+
+Edit your authentication logic in server/index.ts (or telegramAuth.ts) and replace it with this:
+
+import { TelegramClient } from "telegram";
+import { StringSession } from "telegram/sessions";
+import dotenv from "dotenv";
+import fs from "fs";
+
+dotenv.config();
+
+const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+const apiHash = process.env.TELEGRAM_API_HASH || "";
+
+// Load session from file if it exists
+const sessionFilePath = "./telegram.session.json";
+const sessionString = fs.existsSync(sessionFilePath) ? fs.readFileSync(sessionFilePath, "utf8") : "";
+
+const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
+    connectionRetries: 5,
+});
+
+(async () => {
+    try {
+        await client.start({
+            phoneNumber: async () => process.env.TELEGRAM_PHONE_NUMBER,
+            password: async () => process.env.TELEGRAM_PASSWORD,
+            phoneCode: async () => {
+                console.log("Enter the OTP from Telegram:");
+                return new Promise(resolve => {
+                    process.stdin.once("data", data => resolve(data.toString().trim()));
+                });
+            },
+            onError: (err) => console.error("[TelegramAuth] ❌ Error:", err),
+        });
+
+        console.log("[TelegramAuth] ✅ Successfully logged into Telegram!");
+        fs.writeFileSync(sessionFilePath, client.session.save());
+    } catch (error) {
+        console.error("[TelegramAuth] ❌ Failed to log in:", error);
+    }
+})();
+
+🚀 Next Steps
+	1.	Install GramJS:
+
+npm install telegram
+
+
+	2.	Authenticate manually:
+
+npx gramjs-cli
+
+
+	3.	Check if the session file exists:
+
+ls -la | grep telegram
+
+
+	4.	Restart the server:
+
+npx tsx server/index.ts
+
+
+	5.	If it still fails, update your Telegram authentication code.
+
+Let me know how it goes! 🚀

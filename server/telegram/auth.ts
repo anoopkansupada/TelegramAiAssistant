@@ -5,12 +5,11 @@ import { CustomLogger } from "../utils/logger";
 import { APIError } from "../utils/errors";
 import { computeCheck } from "telegram/Password";
 import bigInt from "big-integer";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 
 const logger = new CustomLogger("[TelegramAuth]");
-const SESSION_FILE_PATH = "./telegram.session.json";
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
 
 export enum TelegramAuthError {
@@ -22,22 +21,10 @@ export enum TelegramAuthError {
     PASSWORD_INVALID = 'TELEGRAM_PASSWORD_INVALID',
     SESSION_EXPIRED = 'TELEGRAM_SESSION_EXPIRED',
     API_ID_INVALID = 'TELEGRAM_API_ID_INVALID',
-    CONNECTION_ERROR = 'TELEGRAM_CONNECTION_ERROR',
-    PHONE_CODE_INVALID = 'TELEGRAM_PHONE_CODE_INVALID'
+    CONNECTION_ERROR = 'TELEGRAM_CONNECTION_ERROR'
 }
 
-export class TelegramAuthenticationError extends Error {
-    constructor(
-        public code: TelegramAuthError,
-        message: string,
-        public statusCode: number = 400
-    ) {
-        super(message);
-        this.name = 'TelegramAuthenticationError';
-    }
-}
-
-// Utility functions for session encryption
+// Utility functions for session encryption remain unchanged
 const encryptSession = (sessionString: string): string => {
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(ENCRYPTION_KEY, 'hex'), iv);
@@ -66,22 +53,114 @@ function createTelegramClient(session: string = "") {
         {
             connectionRetries: 5,
             useWSS: true,
-            maxConcurrentDownloads: 10,
-            deviceModel: "Telegram Web",
-            systemVersion: "Chrome",
+            deviceModel: "TelegramCRM",
+            systemVersion: "1.0.0",
             appVersion: "1.0.0",
-            autoReconnect: true,
-            retryDelay: 2000
+            testServers: true // Use test servers in development
         }
     );
 }
 
+async function handleFloodWait(error: Error) {
+    if (error instanceof Error && error.message.includes('FLOOD_WAIT_')) {
+        const waitTime = parseInt(error.message.split('_').pop() || '0') * 1000;
+        const maxWait = 5 * 60 * 1000; // 5 minutes
+        const actualWait = Math.min(waitTime, maxWait);
+
+        logger.warn(`Rate limited, waiting ${actualWait/1000}s`);
+        await new Promise(resolve => setTimeout(resolve, actualWait));
+
+        // Documented backoff strategy
+        const retryAfter = Math.floor(actualWait * (1 + Math.random()));
+        await new Promise(resolve => setTimeout(resolve, retryAfter));
+    }
+}
+
+export async function requestVerificationCode(phoneNumber: string): Promise<{ phoneCodeHash: string }> {
+    logger.info('Requesting verification code', { phoneNumber });
+    const client = createTelegramClient();
+
+    try {
+        await client.connect();
+        const result = await client.invoke(new Api.auth.SendCode({
+            phoneNumber,
+            apiId: parseInt(process.env.TELEGRAM_API_ID!),
+            apiHash: process.env.TELEGRAM_API_HASH!,
+            settings: new Api.CodeSettings({
+                allowFlashcall: false,
+                currentNumber: true,
+                allowAppHash: true // Critical for server apps
+            })
+        }));
+
+        if (!result || !(result as any).phoneCodeHash) {
+            throw new Error('Failed to get phone code hash from Telegram');
+        }
+
+        const phoneCodeHash = (result as any).phoneCodeHash as string;
+        logger.info('Verification code sent successfully', { phoneNumber });
+        return { phoneCodeHash };
+    } catch (error: any) {
+        await handleFloodWait(error);
+        logger.error('Failed to request verification code', error);
+        throw APIError.fromTelegramError(error);
+    } finally {
+        await client.disconnect();
+    }
+}
+
+export async function verifyCode(
+    phoneNumber: string,
+    code: string,
+    phoneCodeHash: string
+): Promise<string> {
+    logger.info('Verifying code', { phoneNumber });
+    const client = createTelegramClient();
+    let retries = 0;
+    const maxRetries = 3;
+
+    while (retries < maxRetries) {
+        try {
+            await client.connect();
+            const signInResult = await client.invoke(new Api.auth.SignIn({
+                phoneNumber,
+                phoneCode: code,
+                phoneCodeHash
+            }));
+
+            if (!signInResult) {
+                throw new Error('Sign in failed - no response from Telegram');
+            }
+
+            const session = client.session.save() as unknown as string;
+            logger.info('Code verified successfully', { phoneNumber });
+            return session;
+        } catch (error: any) {
+            if (error.message === 'SESSION_PASSWORD_NEEDED') {
+                throw new Error('2FA required');
+            }
+
+            await handleFloodWait(error);
+            retries++;
+
+            if (retries === maxRetries) {
+                logger.error('Max retries reached during verification');
+                throw error;
+            }
+        } finally {
+            await client.disconnect();
+        }
+    }
+
+    throw new Error('Verification failed after max retries');
+}
+
 export async function loadSession(): Promise<string | null> {
     try {
-        if (!fs.existsSync(SESSION_FILE_PATH)) {
+        if (!fs.existsSync("./telegram.session.json")) {
             return null;
         }
-        const encryptedSession = fs.readFileSync(SESSION_FILE_PATH, 'utf8').trim();
+        const encryptedSession = fs.readFileSync("./telegram.session.json", 'utf8').trim();
         return decryptSession(encryptedSession);
     } catch (error) {
         logger.error('Failed to load session:', error);
@@ -92,7 +171,7 @@ export async function loadSession(): Promise<string | null> {
 export async function saveSession(sessionString: string): Promise<void> {
     try {
         const encryptedSession = encryptSession(sessionString);
-        fs.writeFileSync(SESSION_FILE_PATH, encryptedSession);
+        fs.writeFileSync("./telegram.session.json", encryptedSession);
         logger.info('Session saved successfully');
     } catch (error) {
         logger.error('Failed to save session:', error);
@@ -110,96 +189,6 @@ export async function validateSession(session: string): Promise<boolean> {
     } catch (error) {
         logger.error('Session validation failed:', error);
         return false;
-    }
-}
-
-export async function requestVerificationCode(phoneNumber: string): Promise<{ phoneCodeHash: string }> {
-    logger.info('Requesting verification code', { phoneNumber });
-    const client = createTelegramClient();
-
-    try {
-        await client.connect();
-        const result = await client.invoke(new Api.auth.SendCode({
-            phoneNumber,
-            apiId: parseInt(process.env.TELEGRAM_API_ID!),
-            apiHash: process.env.TELEGRAM_API_HASH!,
-            settings: new Api.CodeSettings({
-                allowFlashcall: false,
-                currentNumber: true,
-                allowAppHash: true,
-            })
-        }));
-
-        if (!result || !(result as any).phoneCodeHash) {
-            throw new Error('Failed to get phone code hash from Telegram');
-        }
-
-        const phoneCodeHash = (result as any).phoneCodeHash as string;
-        logger.info('Verification code sent successfully', { phoneNumber });
-
-        // Store the phone code hash temporarily
-        process.env.TELEGRAM_PHONE_CODE_HASH = phoneCodeHash;
-
-        return { phoneCodeHash };
-    } catch (error: any) {
-        if (error.errorMessage?.includes('PHONE_MIGRATE_')) {
-            const dcId = parseInt(error.errorMessage.split('_').pop() || '0');
-            await client.session.setDC(dcId, '', '');
-            return requestVerificationCode(phoneNumber);
-        }
-        logger.error('Failed to request verification code', error);
-        throw APIError.fromTelegramError(error);
-    } finally {
-        await client.disconnect();
-    }
-}
-
-export async function verifyCode(
-    phoneNumber: string,
-    code: string,
-    phoneCodeHash: string = process.env.TELEGRAM_PHONE_CODE_HASH || ''
-): Promise<string> {
-    logger.info('Verifying code', { phoneNumber });
-    const client = createTelegramClient();
-
-    if (!phoneCodeHash) {
-        throw new Error('Phone code hash not found. Please request a new verification code.');
-    }
-
-    try {
-        await client.connect();
-        const signInResult = await client.invoke(new Api.auth.SignIn({
-            phoneNumber: phoneNumber,
-            phoneCode: code,
-            phoneCodeHash: phoneCodeHash
-        }));
-
-        if (!signInResult) {
-            throw new Error('Sign in failed - no response from Telegram');
-        }
-
-        if ((signInResult as any)._ === 'auth.authorizationSignUpRequired') {
-            throw new Error('Sign up required');
-        }
-
-        const session = client.session.save() as unknown as string;
-        await saveSession(session);
-        logger.info('Code verified and session saved successfully', { phoneNumber });
-
-        // Clear the stored phone code hash
-        delete process.env.TELEGRAM_PHONE_CODE_HASH;
-
-        return session;
-    } catch (error: any) {
-        if (error.errorMessage?.includes('PHONE_MIGRATE_')) {
-            const dcId = parseInt(error.errorMessage.split('_').pop() || '0');
-            await client.session.setDC(dcId, '', '');
-            return verifyCode(phoneNumber, code, phoneCodeHash);
-        }
-        logger.error('Failed to verify code', error);
-        throw APIError.fromTelegramError(error);
-    } finally {
-        await client.disconnect();
     }
 }
 

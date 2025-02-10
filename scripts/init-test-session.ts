@@ -5,11 +5,11 @@ import { TelegramClient } from "telegram";
 import { FloodWaitError } from "telegram/errors";
 import { input } from "@inquirer/prompts";
 
-// Use test configuration during development
+// Use official test configuration as per documentation
 const TEST_CONFIG = {
   apiId: 17349,
   apiHash: "344583e45741c457fe1862106095a5eb",
-  useTestDc: true
+  testServers: true
 };
 
 async function handleFloodWait(error: Error) {
@@ -25,7 +25,7 @@ async function handleFloodWait(error: Error) {
 }
 
 async function main() {
-  console.log("Initializing test Telegram session using test configuration...");
+  console.log("Initializing test Telegram session using official test configuration...");
 
   const client = new TelegramClient(
     new StringSession(""),
@@ -34,12 +34,11 @@ async function main() {
     {
       connectionRetries: 5,
       useWSS: true,
-      deviceModel: "TelegramCRM/1.0",
-      systemVersion: "Linux",
+      deviceModel: "TelegramCRM",
+      systemVersion: "1.0.0",
       appVersion: "1.0.0",
       useTestDc: true,
-      dcId: 2, // Test DC
-      testServers: true
+      dcId: 2 // Test DC
     }
   );
 
@@ -52,7 +51,7 @@ async function main() {
         _: "codeSettings",
         allowFlashCall: false,
         currentNumber: true,
-        allowAppHash: true
+        allowAppHash: true // Critical for server apps
       }
     });
 
@@ -64,17 +63,13 @@ async function main() {
 
     while (retries < maxRetries) {
       try {
-        const code = process.env.TELEGRAM_CODE;
-        if (!code) {
-          throw new Error("TELEGRAM_CODE environment variable not set");
-        }
-
-        await client.signIn({
+        const code = await input({ message: "Please enter the code you received: " });
+        await client.invoke({
+          _: 'auth.signIn',
           phoneNumber: process.env.TELEGRAM_PHONE_NUMBER!,
           phoneCodeHash: result.phoneCodeHash,
           phoneCode: code
         });
-
         break;
       } catch (e: any) {
         if (e.message === "SESSION_PASSWORD_NEEDED") {
@@ -113,7 +108,8 @@ async function main() {
       metadata: {
         initializedAt: new Date().toISOString(),
         method: 'test-dc-init',
-        useTestDc: true
+        useTestDc: true,
+        dcId: 2
       }
     });
 

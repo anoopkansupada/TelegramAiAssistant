@@ -36,11 +36,19 @@ const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY = 5000; // 5 seconds
 const MAX_RETRY_DELAY = 30000; // 30 seconds
 
+// Official test configuration as per documentation
+const TEST_CONFIG = {
+  apiId: 17349,
+  apiHash: "344583e45741c457fe1862106095a5eb",
+  dcId: 2,
+  useTestDc: true
+};
+
 async function initializeTelegramClient(attempt = 1): Promise<TelegramClient | null> {
   try {
     logger.info("🟢 Phase 1: Session file validation");
-    const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
-    const apiHash = process.env.TELEGRAM_API_HASH || "";
+    const apiId = process.env.NODE_ENV === 'development' ? TEST_CONFIG.apiId : parseInt(process.env.TELEGRAM_API_ID || "0");
+    const apiHash = process.env.NODE_ENV === 'development' ? TEST_CONFIG.apiHash : process.env.TELEGRAM_API_HASH || "";
     const phoneNumber = process.env.TELEGRAM_PHONE_NUMBER;
 
     if (!apiId || !apiHash || !phoneNumber) {
@@ -48,12 +56,15 @@ async function initializeTelegramClient(attempt = 1): Promise<TelegramClient | n
       return null;
     }
 
-    // Use the pool to manage connections
+    // Use the pool to manage connections with test configuration in development
     logger.info("🟢 Phase 2: Connection protocol negotiation");
     const pool = TelegramPool.getInstance();
     try {
       // Default admin user ID = 1
-      const client = await pool.getClient(1);
+      const client = await pool.getClient(1, {
+        useTestDc: process.env.NODE_ENV === 'development',
+        dcId: process.env.NODE_ENV === 'development' ? TEST_CONFIG.dcId : undefined
+      });
 
       logger.info("🟢 Phase 3: Authentication check");
       const health = await validateTelegramSession(client);

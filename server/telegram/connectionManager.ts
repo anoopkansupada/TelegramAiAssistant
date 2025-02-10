@@ -1,6 +1,5 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
-import { Api } from "telegram/tl";
 import { CustomLogger } from "../utils/logger";
 
 interface ConnectionPoolItem {
@@ -99,14 +98,37 @@ export class TelegramConnectionManager {
 
   async validateSession(client: TelegramClient): Promise<boolean> {
     try {
-      // Try to get self user as session validation
-      await client.getMe();
-      return true;
-    } catch (error: any) {
-      if (error.message?.includes('FLOOD_WAIT_')) {
-        this.logger.error(`Flood wait during session validation: ${error.message}`);
+      // Validate critical session fields
+      const session = client.session;
+      const sessionData = JSON.parse(session.save() as string);
+
+      // Required keys as per Telegram docs
+      const REQUIRED_KEYS = ['dc', 'serverAddress', 'port', 'authKey'];
+      if (!REQUIRED_KEYS.every(k => sessionData[k])) {
+        this.logger.error("Invalid session: Missing critical fields");
         return false;
       }
+
+      // Verify DC compatibility
+      const validDCs = [1, 2, 3, 4, 5];
+      if (!validDCs.includes(sessionData.dc)) {
+        this.logger.error(`Invalid DC ID: ${sessionData.dc}`);
+        return false;
+      }
+
+      // Test connection with validated session
+      await client.connect();
+      const me = await client.getMe();
+      return !!me;
+    } catch (error: any) {
+      if (error.message?.includes('FLOOD_WAIT_')) {
+        const waitSeconds = parseInt(error.message.split('_').pop() || '0');
+        this.logger.warn(`Rate limited during session validation: ${waitSeconds}s`);
+        await new Promise(resolve => setTimeout(resolve, Math.min(waitSeconds * 1000, 300000)));
+        return false;
+      }
+
+      this.logger.error('Session validation failed:', error);
       return false;
     }
   }

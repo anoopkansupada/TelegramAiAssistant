@@ -95,44 +95,53 @@ export class TelegramPool {
   }
 
   private async validateSessionString(sessionString: string): Promise<boolean> {
-    if (!sessionString || typeof sessionString !== 'string') {
-      logger.error('Session string is null or not a string');
-      return false;
-    }
-
     try {
-      // Must be a valid base64 string
-      const base64Regex = /^[A-Za-z0-9+/=]+$/;
-      if (!base64Regex.test(sessionString)) {
-        logger.error('Session string is not a valid base64 string');
+      logger.info('Starting session string validation');
+
+      if (!sessionString || typeof sessionString !== 'string') {
+        logger.error('Session string is null or not a string');
         return false;
       }
 
-      // Telegram session strings have a specific format and minimum length
-      if (sessionString.length < 100) {
-        logger.error('Session string is too short to be valid');
-        return false;
-      }
-
-      // Try to decode the base64 string
       try {
-        Buffer.from(sessionString, 'base64');
-      } catch (e) {
-        logger.error('Failed to decode session string as base64');
+        // Try creating a StringSession - this will validate format
+        const stringSession = new StringSession(sessionString);
+        const serialized = await stringSession.save();
+
+        if (!serialized) {
+          logger.error('Failed to serialize session - invalid format');
+          return false;
+        }
+
+        // Now check if it's a valid base64 string
+        const decodedStr = Buffer.from(serialized, 'base64').toString('utf8');
+        const parts = decodedStr.split(':');
+
+        // Valid test session format per Telegram docs
+        if (process.env.NODE_ENV === 'development') {
+          // Test DC must be 2
+          const dcId = parseInt(parts[0]);
+          if (dcId !== 2) {
+            logger.error(`Invalid test DC ID: ${dcId}, must be 2`);
+            return false;
+          }
+        } else {
+          // Production DC must be 1-5
+          const dcId = parseInt(parts[0]);
+          if (dcId < 1 || dcId > 5) {
+            logger.error(`Invalid production DC ID: ${dcId}, must be 1-5`);
+            return false;
+          }
+        }
+
+        logger.info('Session string validated successfully');
+        return true;
+      } catch (error) {
+        logger.error('Failed to validate session string:', error);
         return false;
       }
-
-      // Additional Telegram-specific validation
-      const decodedSession = Buffer.from(sessionString, 'base64').toString('utf8');
-      if (!decodedSession.includes('user') || !decodedSession.includes('dc')) {
-        logger.error('Session string missing required Telegram data');
-        return false;
-      }
-
-      logger.info('Session string passed all validation checks');
-      return true;
     } catch (error) {
-      logger.error('Error during session string validation:', error);
+      logger.error('Validation error:', error);
       return false;
     }
   }
@@ -163,70 +172,63 @@ export class TelegramPool {
         await this.cleanupOldConnections();
       }
 
+      logger.info('Creating new Telegram client connection');
+      const useTestDc = process.env.NODE_ENV === 'development';
+
+      // Get session from storage or environment
       let sessionString = process.env.TELEGRAM_SESSION;
       let storedSession = null;
-      let useTestDc = false;
-
-      logger.info('Attempting to acquire session string...');
 
       if (!sessionString) {
-        logger.info('No environment session found, checking database...');
+        logger.info('No environment session, checking database');
         storedSession = await storage.getTelegramSession(userId);
+
         if (!storedSession) {
           logger.error('No session found in database');
           throw new Error('No session found for user');
         }
+
         try {
           sessionString = await this.decryptSession(storedSession.sessionString);
-          useTestDc = storedSession.metadata?.useTestDc || false;
           logger.info('Successfully decrypted stored session');
         } catch (error) {
           logger.error('Failed to decrypt stored session:', error);
-          throw new Error('Failed to decrypt stored session');
+          throw error;
         }
       }
 
       // Validate session string
       if (!await this.validateSessionString(sessionString)) {
-        const error = new Error('Invalid session string format');
-        logger.error('Session validation failed:', error);
-        throw error;
+        logger.error('Session string validation failed');
+        throw new Error('Invalid session string format');
       }
 
-      logger.info('Creating new connection with validated session string');
+      logger.info('Creating new client with validated session');
       const stringSession = new StringSession(sessionString);
 
-      const client = new TelegramClient(
-        stringSession,
-        parseInt(storedSession?.apiId || process.env.TELEGRAM_API_ID!),
-        storedSession?.apiHash || process.env.TELEGRAM_API_HASH!,
-        {
-          connectionRetries: 5,
-          useWSS: true,
-          maxConcurrentDownloads: 10,
-          deviceModel: "TelegramCRM/1.0",
-          systemVersion: "Linux",
-          appVersion: "1.0.0",
-          floodSleepThreshold: 60,
-          autoReconnect: true,
-          requestRetries: 5,
-          retryDelay: 2000,
-          useIPV6: false,
-          timeout: 30000,
-          useTestDc: useTestDc,
-          testServers: useTestDc,
-          dcId: useTestDc ? 2 : undefined // Use DC 2 for test mode
-        }
-      );
+      // Use test configuration in development
+      const apiId = useTestDc ? 17349 : parseInt(storedSession?.apiId || process.env.TELEGRAM_API_ID!);
+      const apiHash = useTestDc ? "344583e45741c457fe1862106095a5eb" : (storedSession?.apiHash || process.env.TELEGRAM_API_HASH!);
+
+      const client = new TelegramClient(stringSession, apiId, apiHash, {
+        connectionRetries: 5,
+        useWSS: true,
+        deviceModel: "TelegramCRM",
+        systemVersion: "1.0.0",
+        appVersion: "1.0.0",
+        useTestDc: useTestDc,
+        testServers: useTestDc
+      });
 
       try {
-        logger.info('Attempting to connect with Telegram client');
+        logger.info('Connecting to Telegram');
         await client.connect();
 
-        logger.info('Connected, testing connection with GetNearestDc');
+        // Verify connection by getting DC info
         const nearestDc = await client.invoke(new Api.help.GetNearestDc());
-        logger.info(`Connected successfully to DC ${nearestDc.thisDc}`);
+        logger.info(`Connected to DC ${nearestDc.thisDc}`);
 
+        // Initialize health monitoring
         const health: ConnectionHealth = {
           latency: 0,
           errors: 0,
@@ -234,25 +236,6 @@ export class TelegramPool {
           status: 'healthy',
           dcId: nearestDc.thisDc
         };
-
-        if (!storedSession && process.env.TELEGRAM_SESSION) {
-          logger.info('Storing injected session in database');
-          const encrypted = await this.encryptSession(process.env.TELEGRAM_SESSION);
-          await storage.createTelegramSession({
-            userId,
-            sessionString: encrypted,
-            apiId: process.env.TELEGRAM_API_ID!,
-            apiHash: process.env.TELEGRAM_API_HASH!,
-            phoneNumber: process.env.TELEGRAM_PHONE_NUMBER!,
-            isActive: true,
-            retryCount: 0,
-            metadata: {
-              initializedAt: new Date().toISOString(),
-              method: 'injection',
-              useTestDc: useTestDc
-            }
-          });
-        }
 
         this.clients.set(userId, {
           client,
@@ -265,7 +248,6 @@ export class TelegramPool {
 
         return client;
       } catch (error: any) {
-        logger.error('Error while connecting to Telegram:', error);
         if (error.message?.includes('FLOOD_WAIT_')) {
           const waitTime = parseInt(error.message.split('_').pop() || '0');
           logger.warn(`Flood wait during connection: ${waitTime}s`);
@@ -281,7 +263,7 @@ export class TelegramPool {
   }
 
   private async rotateSession(userId: number) {
-    logger.info(`Rotating session for user ${userId} due to extreme flood wait`);
+    logger.info(`Rotating session for user ${userId}`);
     await this.cleanup(userId);
     await storage.deactivateTelegramSession(userId);
   }
@@ -303,7 +285,7 @@ export class TelegramPool {
       try {
         await client.client.disconnect();
       } catch (error) {
-        logger.error('Error disconnecting client', error);
+        logger.error('Error disconnecting client:', error);
       }
       this.clients.delete(userId);
     }
@@ -315,16 +297,14 @@ export class TelegramPool {
         try {
           await this.floodArmor.execute(async () => {
             const start = Date.now();
-            await client.client.invoke(new Api.help.GetNearestDc());
+            const nearestDc = await client.client.invoke(new Api.help.GetNearestDc());
+
             client.health.latency = Date.now() - start;
             client.health.lastCheck = new Date();
             client.health.status = 'healthy';
+            client.health.dcId = nearestDc.thisDc;
 
-            const nearestDc = await client.client.invoke(new Api.help.GetNearestDc());
-            if (client.health.dcId !== nearestDc.thisDc) {
-              logger.info(`DC changed for user ${userId}: ${client.health.dcId} -> ${nearestDc.thisDc}`);
-              client.health.dcId = nearestDc.thisDc;
-            }
+            logger.debug(`Health check passed for user ${userId} (DC: ${nearestDc.thisDc}, latency: ${client.health.latency}ms)`);
           });
         } catch (error: any) {
           if (error.message?.includes('FLOOD_WAIT_')) {
@@ -335,10 +315,11 @@ export class TelegramPool {
           } else {
             client.health.errors++;
             client.health.status = client.health.errors >= this.maxErrors ? 'error' : 'degraded';
-            logger.error(`Health check failed for user ${userId}`, error);
+            logger.error(`Health check failed for user ${userId}:`, error);
           }
 
           if (client.health.status === 'error') {
+            logger.warn(`Cleaning up unhealthy client for user ${userId}`);
             await this.cleanup(userId);
           }
         }

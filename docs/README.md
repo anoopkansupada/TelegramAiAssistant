@@ -7,6 +7,8 @@ Welcome to the project documentation. This documentation is organized into sever
 - [API Documentation](API.md) - API endpoints and usage
 - [Authentication](AUTHENTICATION.md) - Authentication flows and security
 - [Database Schema](SCHEMA.md) - Database models and relationships
+- [Features](FEATURES.md) - Current and planned feature tracking
+- [Roadmap](ROADMAP.md) - Development phases and timeline
 
 ## Developer Guides
 - [Documentation Guide](guides/DOCUMENTATION.md) - Documentation standards and structure
@@ -21,14 +23,18 @@ Welcome to the project documentation. This documentation is organized into sever
 
 ## Getting Started
 1. Review the [Architecture](ARCHITECTURE.md) to understand the system design
-2. Set up your development environment using the [Documentation Guide](guides/DOCUMENTATION.md)
-3. Follow the [API Documentation](API.md) to interact with the system
-4. Use the [Troubleshooting](guides/TROUBLESHOOTING.md) for common issues
+2. Check the [Features](FEATURES.md) to see what's available and planned
+3. Follow the [Roadmap](ROADMAP.md) for development timeline
+4. Set up your development environment using the [Documentation Guide](guides/DOCUMENTATION.md)
+5. Use the [API Documentation](API.md) to interact with the system
+6. Reference [Troubleshooting](guides/TROUBLESHOOTING.md) for common issues
 
 ## Contributing
 Before contributing, please review:
 1. [Documentation Guide](guides/DOCUMENTATION.md)
-2. Testing requirements in the relevant guide
+2. [Features](FEATURES.md) for project roadmap
+3. [Roadmap](ROADMAP.md) for development phases
+4. Testing requirements in the relevant guide
 
 ## Version Control
 This documentation follows semantic versioning. Major version changes will be accompanied by migration guides.

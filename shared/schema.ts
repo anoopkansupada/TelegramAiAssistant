@@ -43,10 +43,6 @@ export const contacts = pgTable("contacts", {
   facebookUrl: text("facebook_url"),
   otherSocialProfiles: jsonb("other_social_profiles"), // Store additional social media profiles
 
-  // Telegram Integration
-  telegramId: text("telegram_id").notNull().unique(),
-  telegramUsername: text("telegram_username"),
-
   // Company Association
   companyId: integer("company_id"),
 
@@ -83,17 +79,11 @@ export const telegramSessions = pgTable("telegram_sessions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   sessionString: text("session_string").notNull(),
-  apiId: text("api_id").notNull(),
-  apiHash: text("api_hash").notNull(),
   phoneNumber: text("phone_number").notNull(),
-  lastAuthDate: timestamp("last_auth_date"),
   lastUsed: timestamp("last_used"),
-  expiresAt: timestamp("expires_at"),
   isActive: boolean("is_active").default(true),
-  retryCount: integer("retry_count").default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
-  metadata: jsonb("metadata"), // For storing additional session info
 });
 
 export const interactions = pgTable("interactions", {
@@ -109,9 +99,9 @@ export const interactions = pgTable("interactions", {
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
-  contactId: integer("contact_id").notNull(),
+  fromId: text("from_id").notNull(),
+  toId: text("to_id").notNull(),
   content: text("content").notNull(),
-  sentiment: text("sentiment"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -186,15 +176,9 @@ export const followupSchedules = pgTable("followup_schedules", {
 export const insertTelegramSessionSchema = createInsertSchema(telegramSessions).pick({
   userId: true,
   sessionString: true,
-  apiId: true,
-  apiHash: true,
   phoneNumber: true,
-  lastAuthDate: true,
   lastUsed: true,
-  expiresAt: true,
   isActive: true,
-  retryCount: true,
-  metadata: true,
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -240,9 +224,9 @@ export const insertContactSchema = createInsertSchema(contacts).pick({
 });
 
 export const insertMessageSchema = createInsertSchema(messages).pick({
-  contactId: true,
+  fromId: true,
+  toId: true,
   content: true,
-  sentiment: true,
 });
 
 export const insertAnnouncementSchema = createInsertSchema(announcements).pick({

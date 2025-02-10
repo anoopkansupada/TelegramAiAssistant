@@ -31,13 +31,19 @@ async function importContacts() {
       const [firstName, lastName] = name.split(' ');
       const phone = element.querySelector('.phone')?.text;
 
-      await db.insert(contacts).values({
-        firstName,
-        lastName: lastName || null,
-        phone: phone || null,
-        createdById: 1, // Default admin user
-        status: 'active',
-      }).execute();
+      await db.insert(contacts)
+        .values({
+          firstName,
+          lastName: lastName || '',
+          phone: phone || '',
+          department: '',
+          email: '',
+          createdById: 1, // Default admin user
+          status: 'active',
+          telegramId: `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Generate unique ID for imported contacts
+        })
+        .returning()
+        .execute();
     }
 
     logger.info('Contacts imported successfully');
@@ -50,6 +56,19 @@ async function importContacts() {
 async function importMessages(userId: number) {
   try {
     logger.info('Starting messages import');
+
+    // Create or get default contact for imported messages
+    const [defaultContact] = await db.insert(contacts)
+      .values({
+        firstName: 'Imported',
+        lastName: 'Messages',
+        createdById: userId,
+        status: 'active',
+        telegramId: `imported-default-${Date.now()}`, // Add unique telegram ID for default contact
+      })
+      .returning()
+      .execute();
+
     for (let i = 1; i <= 14; i++) {
       const filename = i === 1 ? 'messages.html' : `messages${i}.html`;
       logger.info(`Processing ${filename}`);
@@ -60,14 +79,16 @@ async function importMessages(userId: number) {
       logger.info(`Found ${messageElements.length} messages in ${filename}`);
 
       for (const element of messageElements) {
-        const fromId = element.querySelector('.from')?.text || 'unknown';
         const content = element.querySelector('.text')?.text || '';
 
-        await db.insert(messages).values({
-          fromId,
-          toId: userId.toString(),
-          content,
-        }).execute();
+        await db.insert(messages)
+          .values({
+            contactId: defaultContact.id,
+            content: content,
+            sentiment: 'neutral', // Default sentiment
+          })
+          .returning()
+          .execute();
       }
 
       logger.info(`Messages from ${filename} imported successfully`);
@@ -91,13 +112,18 @@ async function importChats() {
       const type = element.classList.contains('group') ? 'group' : 'private';
       const telegramId = element.id || Date.now().toString();
 
-      await db.insert(telegramChats).values({
-        telegramId,
-        title,
-        type,
-        status: 'synced',
-        createdById: 1, // Default admin user
-      }).execute();
+      await db.insert(telegramChats)
+        .values({
+          telegramId,
+          title,
+          type,
+          status: 'synced',
+          createdById: 1, // Default admin user
+          importance: 0,
+          unreadCount: 0,
+        })
+        .returning()
+        .execute();
     }
 
     logger.info('Chats imported successfully');

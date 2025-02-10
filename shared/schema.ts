@@ -2,77 +2,137 @@ import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Users table - for authentication and system access
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   twoFactorSecret: text("two_factor_secret"),
+  role: text("role").default("user"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
 });
 
+// Companies/Organizations
 export const companies = pgTable("companies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   industry: text("industry"),
-  size: text("size"),
+  size: text("size"), // small, medium, large, enterprise
   location: text("location"),
+
+  // Contact Information
   phone: text("phone"),
   email: text("email"),
   website: text("website"),
+
+  // Social Media
   linkedinUrl: text("linkedin_url"),
   twitterHandle: text("twitter_handle"),
   facebookUrl: text("facebook_url"),
+
+  // Business Information
   annualRevenue: text("annual_revenue"),
+  employeeCount: integer("employee_count"),
+  foundedYear: integer("founded_year"),
+
+  // Relationships
+  parentCompanyId: integer("parent_company_id"),
+
+  // Additional Data
+  type: text("type"), // prospect, customer, partner
+  status: text("status").default("active"), // active, inactive, lead
+  tags: text("tags").array(),
+  customFields: jsonb("custom_fields"),
+
+  // Financial Information
   fundingDetails: jsonb("funding_details"),
+
+  // Metadata
   createdById: integer("created_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
 });
 
+// Contacts (people)
 export const contacts = pgTable("contacts", {
   id: serial("id").primaryKey(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name"),
   jobTitle: text("job_title"),
   department: text("department"),
+  telegramId: text("telegram_id").default('imported'),
 
-  // Contact Details
+  // Contact Information
   phone: text("phone"),
   email: text("email"),
+  alternativeEmail: text("alternative_email"),
+
+  // Social Profiles
   linkedinUrl: text("linkedin_url"),
   twitterHandle: text("twitter_handle"),
   facebookUrl: text("facebook_url"),
-  otherSocialProfiles: jsonb("other_social_profiles"), // Store additional social media profiles
+  otherSocialProfiles: jsonb("other_social_profiles"),
 
-  // Company Association
+  // Relationships
   companyId: integer("company_id"),
+  reportsToId: integer("reports_to_id"), // hierarchical relationship
 
   // Communication Preferences
-  preferredContactMethod: text("preferred_contact_method"), // email, phone, telegram, etc
+  preferredContactMethod: text("preferred_contact_method"),
   timeZone: text("time_zone"),
-  availabilityHours: jsonb("availability_hours"), // Store working hours/availability
+  availabilityHours: jsonb("availability_hours"),
+  doNotContact: boolean("do_not_contact").default(false),
 
-  // Interaction History
+  // Classification
+  type: text("type").default("contact"), // lead, customer, prospect
+  status: text("status").default("active"),
+  leadScore: integer("lead_score"),
+  tags: text("tags").array(),
+
+  // Custom Data
+  customFields: jsonb("custom_fields"),
+
+  // Activity Tracking
   lastContactedAt: timestamp("last_contacted_at"),
-  meetingNotes: jsonb("meeting_notes"), // Array of meeting notes with timestamps
-  callHistory: jsonb("call_history"), // Array of call logs with timestamps
-  emailHistory: jsonb("email_history"), // Track email interactions
-
-  // Task Management
-  followUpTasks: jsonb("followup_tasks"), // Array of pending tasks
-  reminders: jsonb("reminders"), // Array of upcoming reminders
-
-  // Status and Tags
-  status: text("status").default('active'), // active, inactive, do-not-contact
-  tags: text("tags").array(), // For categorization and filtering
-
-  // Custom Fields
-  customFields: jsonb("custom_fields"), // For organization-specific data
+  nextFollowUpDate: timestamp("next_follow_up_date"),
 
   // Metadata
   createdById: integer("created_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
   lastActivityAt: timestamp("last_activity_at"),
+});
+
+// Interactions (meetings, calls, emails)
+export const interactions = pgTable("interactions", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").notNull(),
+  type: text("type").notNull(), // meeting, call, email, telegram
+  subject: text("subject"),
+  notes: text("notes"),
+  outcome: text("outcome"),
+  nextSteps: text("next_steps"),
+  scheduledFor: timestamp("scheduled_for"),
+  duration: integer("duration"), // in minutes
+  status: text("status").default("completed"),
+  location: text("location"),
+  metadata: jsonb("metadata"),
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Messages (from Telegram)
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").notNull(),
+  content: text("content").notNull(),
+  direction: text("direction").default("inbound"), // inbound or outbound
+  channel: text("channel").default("telegram"),
+  sentiment: text("sentiment"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const telegramSessions = pgTable("telegram_sessions", {
@@ -84,25 +144,6 @@ export const telegramSessions = pgTable("telegram_sessions", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
-});
-
-export const interactions = pgTable("interactions", {
-  id: serial("id").primaryKey(),
-  contactId: integer("contact_id").notNull(),
-  type: text("type").notNull(), // meeting, call, email, telegram
-  notes: text("notes"),
-  meetingNotes: text("meeting_notes"),
-  nextSteps: text("next_steps"),
-  createdById: integer("created_by_id").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const messages = pgTable("messages", {
-  id: serial("id").primaryKey(),
-  fromId: text("from_id").notNull(),
-  toId: text("to_id").notNull(),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const announcements = pgTable("announcements", {
@@ -184,6 +225,7 @@ export const insertTelegramSessionSchema = createInsertSchema(telegramSessions).
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  role: true,
 });
 
 export const insertCompanySchema = createInsertSchema(companies).pick({
@@ -198,6 +240,13 @@ export const insertCompanySchema = createInsertSchema(companies).pick({
   twitterHandle: true,
   facebookUrl: true,
   annualRevenue: true,
+  employeeCount: true,
+  foundedYear: true,
+  parentCompanyId: true,
+  type: true,
+  status: true,
+  tags: true,
+  customFields: true,
   fundingDetails: true,
 });
 
@@ -206,27 +255,35 @@ export const insertContactSchema = createInsertSchema(contacts).pick({
   lastName: true,
   jobTitle: true,
   department: true,
+  telegramId: true,
   phone: true,
   email: true,
+  alternativeEmail: true,
   linkedinUrl: true,
   twitterHandle: true,
   facebookUrl: true,
   otherSocialProfiles: true,
-  telegramId: true,
-  telegramUsername: true,
   companyId: true,
+  reportsToId: true,
   preferredContactMethod: true,
   timeZone: true,
   availabilityHours: true,
+  doNotContact: true,
+  type: true,
   status: true,
+  leadScore: true,
   tags: true,
   customFields: true,
+  nextFollowUpDate: true,
 });
 
 export const insertMessageSchema = createInsertSchema(messages).pick({
-  fromId: true,
-  toId: true,
+  contactId: true,
   content: true,
+  direction: true,
+  channel: true,
+  sentiment: true,
+  metadata: true,
 });
 
 export const insertAnnouncementSchema = createInsertSchema(announcements).pick({
@@ -287,9 +344,15 @@ export const insertFollowupScheduleSchema = createInsertSchema(followupSchedules
 export const insertInteractionSchema = createInsertSchema(interactions).pick({
   contactId: true,
   type: true,
+  subject: true,
   notes: true,
-  meetingNotes: true,
+  outcome: true,
   nextSteps: true,
+  scheduledFor: true,
+  duration: true,
+  status: true,
+  location: true,
+  metadata: true,
 });
 
 export const messageSuggestions = pgTable("message_suggestions", {

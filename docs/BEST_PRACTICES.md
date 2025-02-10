@@ -1,4 +1,3 @@
-```typescript
 ### Connection Management
 ```typescript
 // Use connection pooling with proper limits
@@ -418,7 +417,95 @@ Remember to:
 - Include performance tests
 
 
-## 7. Monitoring and Logging
+## 7. Userbot Implementation Best Practices
+
+### Session Management
+```typescript
+// Implement secure session storage
+class SecureSessionStore {
+  private async encryptSession(session: string): Promise<string> {
+    const iv = randomBytes(16);
+    const cipher = createCipheriv('aes-256-gcm', this.encryptionKey, iv);
+    const encrypted = Buffer.concat([
+      cipher.update(session, 'utf8'),
+      cipher.final()
+    ]);
+    const authTag = cipher.getAuthTag();
+    return `${iv.toString('hex')}:${encrypted.toString('hex')}:${authTag.toString('hex')}`;
+  }
+
+  private async decryptSession(encrypted: string): Promise<string> {
+    const [iv, data, authTag] = encrypted.split(':').map(x => Buffer.from(x, 'hex'));
+    const decipher = createDecipheriv('aes-256-gcm', this.encryptionKey, iv);
+    decipher.setAuthTag(authTag);
+    return decipher.update(data, undefined, 'utf8') + decipher.final('utf8');
+  }
+}
+
+// Implement session rotation
+class SessionManager {
+  private readonly MAX_SESSION_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  async rotateIfNeeded(): Promise<void> {
+    const currentSession = await this.getCurrentSession();
+    if (Date.now() - currentSession.createdAt > this.MAX_SESSION_AGE) {
+      await this.rotateSession();
+    }
+  }
+}
+```
+
+### Error Handling
+```typescript
+// Implement comprehensive error handling
+class UserBotErrorHandler {
+  async handle(error: Error): Promise<void> {
+    if (error instanceof FloodWaitError) {
+      await this.handleFloodWait(error);
+    } else if (error instanceof ConnectionError) {
+      await this.handleConnectionError(error);
+    } else if (error instanceof AuthenticationError) {
+      await this.handleAuthError(error);
+    } else {
+      await this.handleUnknownError(error);
+    }
+  }
+
+  private async handleFloodWait(error: FloodWaitError): Promise<void> {
+    logger.warn(`FloodWait: ${error.seconds}s`);
+    await delay(error.seconds * 1000);
+    metrics.increment('flood_wait_total', error.seconds);
+  }
+}
+```
+
+### Connection Management
+```typescript
+// Implement connection pooling
+class ConnectionPool {
+  private readonly pool: Map<string, TelegramClient> = new Map();
+  private readonly maxSize = 5;
+
+  async acquire(session: string): Promise<TelegramClient> {
+    if (this.pool.has(session)) {
+      const client = this.pool.get(session)!;
+      if (await this.validateClient(client)) {
+        return client;
+      }
+    }
+
+    const client = await this.createClient(session);
+    if (this.pool.size >= this.maxSize) {
+      await this.cleanup();
+    }
+    this.pool.set(session, client);
+    return client;
+  }
+}
+```
+
+```typescript
+## 8. Monitoring and Logging
 ```typescript
 const logger = {
   info(message: string, meta?: object) {
@@ -458,7 +545,7 @@ const metrics = {
 ```
 
 ```typescript
-## 8. Monitoring and Observability
+## 9. Monitoring and Observability
 ```typescript
 // Set up structured logging with context
 const logger = {
@@ -520,7 +607,7 @@ const metrics = {
   }
 };
 
-## 9. Documentation Maintenance
+## 10. Documentation Maintenance
 
 ### Documentation Synchronization
 ```typescript
@@ -567,3 +654,11 @@ const docReferences = {
     dataProtection: 'BEST_PRACTICES.md#data-protection'
   }
 };
+```
+
+## Version History
+- v1.1.0 (2025-02-10)
+  - Added userbot implementation best practices
+  - Enhanced session management guidelines
+  - Added connection pooling examples
+  - Added error handling patterns

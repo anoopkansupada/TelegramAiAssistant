@@ -1,9 +1,3 @@
-Client -> Server: POST /api/auth/refresh
-Server -> Database: Validate refresh token
-Database -> Server: Token valid
-Server -> Client: New access token
-```
-
 ## API Authentication
 
 POST /api/auth/login
@@ -546,5 +540,68 @@ Response format:
     "totalPages": 10,
     "totalItems": 495,
     "itemsPerPage": 50
+  }
+}
+```
+
+## Userbot API Endpoints
+
+### Session Management
+
+GET /api/userbot/status
+- Description: Get detailed userbot connection status and metrics
+- Authentication: Required (Admin)
+- Response: {
+    connected: boolean,
+    session: {
+      active: boolean,
+      createdAt: string,
+      lastUsed: string,
+      deviceModel: string,
+      systemVersion: string,
+      appVersion: string
+    },
+    metrics: {
+      messageLatency: number,
+      floodWait: number,
+      connectionAttempts: number,
+      lastReconnect: string
+    }
+  }
+
+POST /api/userbot/disconnect
+- Description: Safely disconnect and cleanup userbot session
+- Authentication: Required (Admin)
+- Response: { success: boolean, message: string }
+- Errors:
+  - 500: { message: "Failed to disconnect", code: "DISCONNECT_FAILED" }
+
+### WebSocket Events for Userbot
+
+```typescript
+// Userbot Status Update
+Server -> Client: {
+  type: 'userbot_status',
+  status: {
+    connected: boolean,
+    session: {
+      active: boolean,
+      createdAt: string,
+      lastUsed: string
+    },
+    metrics: {
+      messageLatency: number,
+      floodWait: number
+    }
+  }
+}
+
+// Userbot Error Event
+Server -> Client: {
+  type: 'userbot_error',
+  error: {
+    code: string,
+    message: string,
+    retryAfter?: number
   }
 }

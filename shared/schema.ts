@@ -320,6 +320,9 @@ export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   role: true,
+}).extend({
+  password: z.string().min(4, "Password must be at least 4 characters"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
 });
 
 // Update insertCompanySchema to include more robust validation
@@ -385,7 +388,6 @@ export const insertCompanySchema = createInsertSchema(companies).pick({
   documentCategories: z.array(z.string()).optional(),
   lastDocumentUpdate: z.string().datetime().optional(),
 });
-
 
 export const insertContactSchema = createInsertSchema(contacts).pick({
   firstName: true,

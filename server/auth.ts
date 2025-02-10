@@ -47,6 +47,19 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Create default admin user if it doesn't exist
+  const adminUsername = "admin";
+  const admin = await storage.getUserByUsername(adminUsername);
+  if (!admin) {
+    console.log("Creating default admin user");
+    const hashedPassword = await hashPassword("admin");
+    await storage.createUser({
+      username: adminUsername,
+      password: hashedPassword,
+      role: "admin"
+    });
+  }
+
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
@@ -65,6 +78,8 @@ export async function setupAuth(app: Express) {
           return done(null, false, { message: "Invalid username or password" });
         }
 
+        // Update last login time
+        await storage.updateUser(user.id, { lastLoginAt: new Date() });
         return done(null, user);
       } catch (error) {
         console.error("Login error:", error);
@@ -82,6 +97,9 @@ export async function setupAuth(app: Express) {
     try {
       console.log(`Deserializing user: ${id}`);
       const user = await storage.getUser(id);
+      if (!user) {
+        return done(null, false);
+      }
       done(null, user);
     } catch (error) {
       console.error("Deserialization error:", error);

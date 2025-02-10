@@ -1,12 +1,3 @@
-Table users {
-  id serial [pk]
-  username text [unique, not null]
-  password text [not null]
-  twoFactorSecret text
-  createdAt timestamp [default: `now()`]
-}
-```
-
 ### Companies
 ```sql
 Table companies {
@@ -138,6 +129,45 @@ Table followupSchedules {
 }
 ```
 
+### WebSocketConnections
+```sql
+Table webSocketConnections {
+  id serial [pk]
+  userId integer [ref: > users.id]
+  connectionId text [unique, not null]
+  clientInfo jsonb
+  connected boolean [default: true]
+  lastHeartbeat timestamp [default: `now()`]
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### WebSocketEvents
+```sql
+Table webSocketEvents {
+  id serial [pk]
+  userId integer [ref: > users.id]
+  connectionId text [ref: > webSocketConnections.connectionId]
+  type text [not null]
+  payload jsonb
+  status text [not null]
+  processedAt timestamp
+  createdAt timestamp [default: `now()`]
+}
+```
+
+### RateLimits
+```sql
+Table rateLimits {
+  id serial [pk]
+  userId integer [ref: > users.id]
+  type text [not null]
+  count integer [default: 1]
+  resetAt timestamp [not null]
+  createdAt timestamp [default: `now()`]
+}
+```
+
 ## Relationships
 1. Users:
    - One-to-many with Companies (creator)
@@ -184,3 +214,12 @@ CREATE INDEX idx_messages_contact_created ON messages(contactId, createdAt DESC)
 CREATE INDEX idx_telegram_chats_category_importance ON telegramChats(category, importance);
 CREATE INDEX idx_company_suggestions_status_confidence ON companySuggestions(status, confidenceScore DESC);
 CREATE INDEX idx_followup_schedules_status_date ON followupSchedules(status, scheduledFor);
+
+-- WebSocket related indexes
+CREATE INDEX idx_websocket_connections_user ON webSocketConnections(userId, connected);
+CREATE INDEX idx_websocket_events_connection ON webSocketEvents(connectionId, createdAt DESC);
+CREATE INDEX idx_rate_limits_user_type ON rateLimits(userId, type, resetAt);
+
+-- Composite indexes for monitoring
+CREATE INDEX idx_websocket_connections_heartbeat ON webSocketConnections(connected, lastHeartbeat);
+CREATE INDEX idx_websocket_events_processing ON webSocketEvents(status, processedAt);

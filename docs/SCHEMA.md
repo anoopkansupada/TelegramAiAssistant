@@ -1,15 +1,3 @@
-### Companies
-```sql
-Table companies {
-  id serial [pk]
-  name text [not null]
-  website text
-  industry text
-  createdById integer [ref: > users.id]
-  createdAt timestamp [default: `now()`]
-}
-```
-
 ### Contacts
 ```sql
 Table contacts {
@@ -21,6 +9,37 @@ Table contacts {
   jobTitle text
   createdById integer [ref: > users.id]
   createdAt timestamp [default: `now()`]
+}
+```
+
+### Opportunities
+```sql
+Table opportunities {
+  id serial [pk]
+  companyId integer [ref: > companies.id]
+  name text [not null]
+  description text
+  value text
+  currency text [default: 'USD']
+  stage text [not null]
+  probability integer
+  expectedCloseDate timestamp
+  actualCloseDate timestamp
+
+  // Additional Details
+  source text
+  type text
+  products text[]
+  competitors text[]
+
+  // Custom Data
+  customFields jsonb
+  notes text
+
+  // Metadata
+  createdById integer [ref: > users.id]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp
 }
 ```
 
@@ -168,15 +187,38 @@ Table rateLimits {
 }
 ```
 
+### CompanyDocuments
+```sql
+Table company_documents {
+  id serial [pk]
+  company_id integer [ref: > companies.id]
+  title text [not null]
+  description text
+  document_type text [not null]
+  category text [not null]
+  url text [not null]
+  version text
+  status text [default: 'active']
+  access_level text [default: 'internal']
+  metadata jsonb
+  created_by_id integer [ref: > users.id]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+  archived_at timestamp
+}
+```
+
 ## Relationships
 1. Users:
    - One-to-many with Companies (creator)
    - One-to-many with Contacts (creator)
    - One-to-many with TelegramChannels (creator)
    - One-to-many with TelegramSessions
+   - One-to-many with Opportunities (creator)
 
 2. Companies:
    - One-to-many with Contacts
+   - One-to-many with Opportunities
    - Created by one User
 
 3. Contacts:
@@ -197,6 +239,15 @@ Table rateLimits {
    - One-to-many with FollowupSchedules
    - Created by one User
 
+7. Opportunities:
+    - Belongs to one Company
+    - Created by one User
+
+8. CompanyDocuments:
+   - Belongs to one Company
+   - Created by one User
+
+
 ## Indexes
 ```sql
 -- Performance indexes
@@ -208,12 +259,14 @@ CREATE INDEX idx_telegram_chats_telegram_id ON telegramChats(telegramId);
 CREATE INDEX idx_company_suggestions_chat_id ON companySuggestions(chatId);
 CREATE INDEX idx_followup_schedules_chat_id ON followupSchedules(chatId);
 CREATE INDEX idx_telegram_sessions_user_id ON telegramSessions(userId);
+CREATE INDEX idx_opportunities_company_id ON opportunities(companyId);
 
 -- Composite indexes for common queries
 CREATE INDEX idx_messages_contact_created ON messages(contactId, createdAt DESC);
 CREATE INDEX idx_telegram_chats_category_importance ON telegramChats(category, importance);
 CREATE INDEX idx_company_suggestions_status_confidence ON companySuggestions(status, confidenceScore DESC);
 CREATE INDEX idx_followup_schedules_status_date ON followupSchedules(status, scheduledFor);
+CREATE INDEX idx_opportunities_stage_date ON opportunities(stage, expectedCloseDate);
 
 -- WebSocket related indexes
 CREATE INDEX idx_websocket_connections_user ON webSocketConnections(userId, connected);
@@ -223,3 +276,8 @@ CREATE INDEX idx_rate_limits_user_type ON rateLimits(userId, type, resetAt);
 -- Composite indexes for monitoring
 CREATE INDEX idx_websocket_connections_heartbeat ON webSocketConnections(connected, lastHeartbeat);
 CREATE INDEX idx_websocket_events_processing ON webSocketEvents(status, processedAt);
+
+-- Document related indexes
+CREATE INDEX idx_company_documents_company ON company_documents(company_id);
+CREATE INDEX idx_company_documents_type ON company_documents(document_type, category);
+CREATE INDEX idx_company_documents_status ON company_documents(status, access_level);

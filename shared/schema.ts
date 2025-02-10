@@ -17,42 +17,80 @@ export const users = pgTable("users", {
 // Companies/Organizations
 export const companies = pgTable("companies", {
   id: serial("id").primaryKey(),
+
+  // Basic Information
   name: text("name").notNull(),
+  legalName: text("legal_name"),
   industry: text("industry"),
   size: text("size"), // small, medium, large, enterprise
   location: text("location"),
+  headquarters: text("headquarters"),
 
   // Contact Information
   phone: text("phone"),
   email: text("email"),
   website: text("website"),
 
-  // Social Media
+  // Social Media Profiles
   linkedinUrl: text("linkedin_url"),
   twitterHandle: text("twitter_handle"),
   facebookUrl: text("facebook_url"),
+  githubUrl: text("github_url"),
 
   // Business Information
+  description: text("description"),
+  mission: text("mission"),
+  vision: text("vision"),
   annualRevenue: text("annual_revenue"),
   employeeCount: integer("employee_count"),
   foundedYear: integer("founded_year"),
 
-  // Relationships
+  // Company Structure
   parentCompanyId: integer("parent_company_id"),
+  subsidiaries: text("subsidiaries").array(),
 
-  // Additional Data
-  type: text("type"), // prospect, customer, partner
-  status: text("status").default("active"), // active, inactive, lead
-  tags: text("tags").array(),
-  customFields: jsonb("custom_fields"),
+  // Industry Specific
+  competitors: text("competitors").array(),
+  marketPosition: text("market_position"),
 
   // Financial Information
-  fundingDetails: jsonb("funding_details"),
+  fundingStage: text("funding_stage"), // seed, series_a, series_b, etc
+  totalFunding: text("total_funding"),
+  fundingRounds: jsonb("funding_rounds"), // Array of funding rounds with details
+  lastFundingDate: timestamp("last_funding_date"),
+  stockSymbol: text("stock_symbol"),
+  marketCap: text("market_cap"),
+
+  // Classification
+  type: text("type"), // prospect, customer, partner, competitor
+  status: text("status").default("active"), // active, inactive, lead
+  priority: text("priority").default("medium"), // low, medium, high
+  tags: text("tags").array(),
+
+  // Engagement
+  lastContactedAt: timestamp("last_contacted_at"),
+  nextFollowUpDate: timestamp("next_follow_up_date"),
+  engagementScore: integer("engagement_score"),
+
+  // Custom & Additional Data
+  customFields: jsonb("custom_fields"),
+  documents: jsonb("documents"), // Store links to important company documents
+  notes: text("notes"),
 
   // Metadata
   createdById: integer("created_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
+  lastEnrichedAt: timestamp("last_enriched_at"),
+  // Knowledge Hub
+  knowledgeHub: jsonb("knowledge_hub").default({
+    documents: [],
+    categories: [],
+    access_rules: {},
+    metadata: {}
+  }),
+  documentCategories: text("document_categories").array(),
+  lastDocumentUpdate: timestamp("last_document_update"),
 });
 
 // Contacts (people)
@@ -214,6 +252,54 @@ export const followupSchedules = pgTable("followup_schedules", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Add opportunities table for better opportunity tracking
+export const opportunities = pgTable("opportunities", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  value: text("value"),
+  currency: text("currency").default("USD"),
+  stage: text("stage").notNull(), // prospecting, qualification, proposal, negotiation, closed_won, closed_lost
+  probability: integer("probability"),
+  expectedCloseDate: timestamp("expected_close_date"),
+  actualCloseDate: timestamp("actual_close_date"),
+
+  // Additional Details
+  source: text("source"),
+  type: text("type"),
+  products: text("products").array(),
+  competitors: text("competitors").array(),
+
+  // Custom Data
+  customFields: jsonb("custom_fields"),
+  notes: text("notes"),
+
+  // Metadata
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Add new document-related schemas
+export const companyDocuments = pgTable("company_documents", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  documentType: text("document_type").notNull(),
+  category: text("category").notNull(),
+  url: text("url").notNull(),
+  version: text("version"),
+  status: text("status").default("active"),
+  accessLevel: text("access_level").default("internal"),
+  metadata: jsonb("metadata"),
+  createdById: integer("created_by_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+  archivedAt: timestamp("archived_at"),
+});
+
 export const insertTelegramSessionSchema = createInsertSchema(telegramSessions).pick({
   userId: true,
   sessionString: true,
@@ -228,26 +314,54 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
 });
 
-export const insertCompanySchema = createInsertSchema(companies).pick({
+export const insertCompanySchema = createInsertSchema(companies).extend({
   name: true,
+  legalName: true,
   industry: true,
   size: true,
   location: true,
+  headquarters: true,
   phone: true,
   email: true,
   website: true,
   linkedinUrl: true,
   twitterHandle: true,
   facebookUrl: true,
+  githubUrl: true,
+  description: true,
+  mission: true,
+  vision: true,
   annualRevenue: true,
   employeeCount: true,
   foundedYear: true,
   parentCompanyId: true,
+  subsidiaries: true,
+  competitors: true,
+  marketPosition: true,
+  fundingStage: true,
+  totalFunding: true,
+  fundingRounds: true,
+  lastFundingDate: true,
+  stockSymbol: true,
+  marketCap: true,
   type: true,
   status: true,
+  priority: true,
   tags: true,
+  lastContactedAt: true,
+  nextFollowUpDate: true,
+  engagementScore: true,
   customFields: true,
-  fundingDetails: true,
+  documents: true,
+  notes: true,
+  knowledgeHub: z.object({
+    documents: z.array(z.any()),
+    categories: z.array(z.string()),
+    access_rules: z.record(z.any()),
+    metadata: z.record(z.any()),
+  }).optional(),
+  documentCategories: z.array(z.string()).optional(),
+  lastDocumentUpdate: z.string().datetime().optional(),
 });
 
 export const insertContactSchema = createInsertSchema(contacts).pick({
@@ -367,6 +481,39 @@ export const insertMessageSuggestionSchema = createInsertSchema(messageSuggestio
   suggestion: true,
 });
 
+// Add the insert schemas for the new table
+export const insertOpportunitySchema = createInsertSchema(opportunities).pick({
+  companyId: true,
+  name: true,
+  description: true,
+  value: true,
+  currency: true,
+  stage: true,
+  probability: true,
+  expectedCloseDate: true,
+  actualCloseDate: true,
+  source: true,
+  type: true,
+  products: true,
+  competitors: true,
+  customFields: true,
+  notes: true,
+});
+
+// Add insert schema for company documents
+export const insertCompanyDocumentSchema = createInsertSchema(companyDocuments).pick({
+  companyId: true,
+  title: true,
+  description: true,
+  documentType: true,
+  category: true,
+  url: true,
+  version: true,
+  status: true,
+  accessLevel: true,
+  metadata: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -380,6 +527,8 @@ export type InsertFollowupSchedule = z.infer<typeof insertFollowupScheduleSchema
 export type InsertInteraction = z.infer<typeof insertInteractionSchema>;
 export type InsertMessageSuggestion = z.infer<typeof insertMessageSuggestionSchema>;
 export type InsertTelegramSession = z.infer<typeof insertTelegramSessionSchema>;
+export type InsertOpportunity = z.infer<typeof insertOpportunitySchema>;
+export type InsertCompanyDocument = z.infer<typeof insertCompanyDocumentSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
@@ -394,3 +543,5 @@ export type FollowupSchedule = typeof followupSchedules.$inferSelect;
 export type Interaction = typeof interactions.$inferSelect;
 export type MessageSuggestion = typeof messageSuggestions.$inferSelect;
 export type TelegramSession = typeof telegramSessions.$inferSelect;
+export type Opportunity = typeof opportunities.$inferSelect;
+export type CompanyDocument = typeof companyDocuments.$inferSelect;

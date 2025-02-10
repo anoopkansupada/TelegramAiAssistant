@@ -3,12 +3,11 @@ import { StringSession } from "telegram/sessions";
 import dotenv from "dotenv";
 import { CustomLogger } from "./utils/logger";
 
-dotenv.config();
-
 const logger = new CustomLogger("[TelegramAuth]");
 
-const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
-const apiHash = process.env.TELEGRAM_API_HASH || "";
+// Using the API credentials from your screenshot
+const apiId = 20186468;
+const apiHash = "5462496a1c6075aa3e29754a1e3ee494";
 
 const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
     connectionRetries: 5,
@@ -17,38 +16,30 @@ const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
 
 async function start() {
     try {
+        logger.info("Starting Telegram authentication process...");
         await client.connect();
 
-        if (!await client.isUserAuthorized()) {
-            logger.info("Starting phone number authentication");
-            await client.start({
-                phoneNumber: async () => process.env.TELEGRAM_PHONE_NUMBER!,
-                password: async () => {
-                    return new Promise((resolve) => {
-                        process.stdin.once('data', (data) => {
-                            resolve(data.toString().trim());
-                        });
-                        console.log("Please enter your 2FA password (if required):");
-                    });
-                },
-                phoneCode: async () => {
-                    return new Promise((resolve) => {
-                        process.stdin.once('data', (data) => {
-                            resolve(data.toString().trim());
-                        });
-                        console.log("Please enter the code sent to your Telegram app:");
-                    });
-                },
-                onError: (err) => {
-                    logger.error("Authentication error:", err);
-                    process.exit(1);
-                }
-            });
-        }
+        logger.info("Starting phone number authentication");
+        await client.start({
+            phoneNumber: async () => process.env.TELEGRAM_PHONE_NUMBER!,
+            password: async () => "",  // If you have 2FA, we'll need to add this
+            phoneCode: async () => {
+                // We'll need the verification code
+                logger.info("Please set the TELEGRAM_CODE secret with the code sent to your Telegram app");
+                return process.env.TELEGRAM_CODE || "";
+            },
+            onError: (err) => {
+                logger.error("Authentication error:", err);
+                process.exit(1);
+            }
+        });
 
         logger.info("✅ Successfully logged into Telegram!");
-        const session = client.session.save() as string;
-        logger.info("Session string:", session);
+        const sessionString = client.session.save();
+        logger.info("\n=== YOUR SESSION STRING (save this) ===");
+        logger.info(sessionString);
+        logger.info("=======================================\n");
+        logger.info("Copy this session string and set it as the TELEGRAM_SESSION secret in Replit.");
 
         await client.disconnect();
         process.exit(0);

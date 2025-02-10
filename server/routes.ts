@@ -59,8 +59,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Phone number is required" });
       }
 
-      // Clean up any existing session first
-      await clientManager.cleanup();
+      // Clean up any existing session if user has one
+      if (req.session.userId) {
+        await clientManager.cleanupClient(req.session.userId.toString());
+      }
 
       // Clear previous Telegram-related session data
       req.session.telegramSession = undefined;
@@ -367,7 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log("[Route] Found Telegram session, checking connection");
-      const client = await clientManager.getClient(telegramSession);
+      const client = await clientManager.getClient(req.session.userId!);
       const me = await client.getMe();
 
       console.log("[Route] Connection check succeeded, user:", {
@@ -386,9 +388,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("[Route] Connection status check failed:", error);
-      // Clear invalid session
+      // Clean up invalid session if user has one
+      if (req.session.userId) {
+        await clientManager.cleanupClient(req.session.userId.toString());
+      }
       req.session.telegramSession = undefined;
-      await clientManager.cleanup();
       res.json({ connected: false });
     }
   });

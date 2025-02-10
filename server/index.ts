@@ -1,13 +1,45 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
-import { registerRoutes } from "./routes";
+import { TelegramClient } from "telegram";
+import { StringSession } from "telegram/sessions";
+import dotenv from "dotenv";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
+import { CustomLogger } from "./utils/logger";
+import { registerRoutes } from "./routes";
+
+dotenv.config();
+
+const logger = new CustomLogger("[TelegramAuth]");
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: false }));
+
+const sessionString = process.env.TELEGRAM_SESSION || "";
+const apiId = parseInt(process.env.TELEGRAM_API_ID || "0");
+const apiHash = process.env.TELEGRAM_API_HASH || "";
+
+const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
+    connectionRetries: 5,
+});
+
+(async () => {
+    try {
+        await client.start({
+            phoneNumber: async () => process.env.TELEGRAM_PHONE_NUMBER!,
+            password: async () => "",
+            phoneCode: async () => "",
+            onError: (err) => {
+                logger.error("Authentication error:", err);
+            }
+        });
+        logger.info("✅ Successfully logged into Telegram!");
+    } catch (error) {
+        logger.error("❌ Error logging into Telegram:", error);
+    }
+})();
 
 // Configure session and auth before other middleware
 setupAuth(app);

@@ -3,7 +3,6 @@ import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import { CustomLogger } from "../utils/logger";
 import { storage } from "../storage";
-import { TelegramPool } from "./pool";
 
 const logger = new CustomLogger("[TelegramAuth]");
 
@@ -20,24 +19,21 @@ export async function requestVerificationCode(phoneNumber: string): Promise<{ ph
     {
       connectionRetries: 5,
       useWSS: true,
+      maxConcurrentDownloads: 10
     }
   );
 
   try {
     await client.connect();
-    const { phoneCodeHash } = await client.sendCode({
+
+    const result = await client.sendCode({
+      phoneNumber,
       apiId: parseInt(process.env.TELEGRAM_API_ID!),
       apiHash: process.env.TELEGRAM_API_HASH!,
-      phoneNumber: phoneNumber,
-      settings: new Api.CodeSettings({
-        allowFlashcall: false,
-        currentNumber: true,
-        allowAppHash: true,
-      }),
     });
 
     logger.info('Verification code sent successfully', { phoneNumber });
-    return { phoneCodeHash };
+    return { phoneCodeHash: result.phoneCodeHash };
   } catch (error) {
     logger.error('Failed to request verification code', error);
     throw error;
@@ -63,22 +59,24 @@ export async function verifyCode(
     {
       connectionRetries: 5,
       useWSS: true,
+      maxConcurrentDownloads: 10
     }
   );
 
   try {
     await client.connect();
-    
-    await client.signIn({
+
+    // Sign in with the provided code
+    const signInResult = await client.signIn({
       phoneNumber,
-      phoneCodeHash,
       phoneCode: code,
+      phoneCodeHash,
     });
 
     // Get the session string for storage
-    const session = client.session.save() as string;
+    const session = client.session.save() as unknown as string;
     logger.info('Code verified successfully', { phoneNumber });
-    
+
     return session;
   } catch (error) {
     logger.error('Failed to verify code', error);
@@ -95,14 +93,15 @@ export async function verifyCode(
  * Verify 2FA password if required
  */
 export async function verify2FA(
-  client: TelegramClient,
-  password: string
+  password: string,
+  client: TelegramClient
 ): Promise<void> {
   logger.info('Verifying 2FA password');
 
   try {
-    await client.checkPassword(password);
+    const result = await client.checkPassword(password);
     logger.info('2FA password verified successfully');
+    return result;
   } catch (error) {
     logger.error('Failed to verify 2FA password', error);
     throw error;

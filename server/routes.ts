@@ -104,6 +104,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       logger.error('Error requesting verification code', error);
 
+      if (error.message?.includes('PHONE_NUMBER_INVALID')) {
+        return res.status(400).json({
+          message: "Invalid phone number format",
+          code: "PHONE_NUMBER_INVALID"
+        });
+      }
+
+      if (error.message?.includes('PHONE_NUMBER_FLOOD')) {
+        return res.status(429).json({
+          message: "Too many attempts. Please try again later",
+          code: "PHONE_NUMBER_FLOOD"
+        });
+      }
+
       if (error.message?.includes('AUTH_RESTART')) {
         return res.status(500).json({
           message: "Please try requesting the code again",

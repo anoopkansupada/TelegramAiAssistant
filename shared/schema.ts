@@ -386,28 +386,6 @@ export const insertCompanySchema = createInsertSchema(companies).pick({
   lastDocumentUpdate: z.string().datetime().optional(),
 });
 
-// Update insertCompanyDocumentSchema with more robust validation
-export const insertCompanyDocumentSchema = createInsertSchema(companyDocuments).pick({
-  companyId: true,
-  title: true,
-  description: true,
-  documentType: true,
-  category: true,
-  url: true,
-  version: true,
-  status: true,
-  accessLevel: true,
-  metadata: true,
-}).extend({
-  title: z.string().min(1, "Title is required").max(255),
-  documentType: z.enum(["contract", "proposal", "report", "presentation", "other"]),
-  category: z.string().min(1, "Category is required"),
-  url: z.string().url("Invalid document URL"),
-  version: z.string().optional(),
-  status: z.enum(["draft", "active", "archived"]).default("active"),
-  accessLevel: z.enum(["internal", "restricted", "public"]).default("internal"),
-  metadata: z.record(z.unknown()).optional()
-});
 
 export const insertContactSchema = createInsertSchema(contacts).pick({
   firstName: true,

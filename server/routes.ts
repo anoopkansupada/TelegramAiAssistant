@@ -10,6 +10,7 @@ import { clientManager } from "./userbot-client";
 import { generateResponseSuggestions } from "./aiSuggestions";
 import { requireTelegramAuth } from "./middleware/telegramAuth";
 import { CustomLogger } from "./utils/logger";
+import { requestVerificationCode, verifyCode, verify2FA } from "./telegram/auth";
 
 const logger = new CustomLogger("[Routes]");
 
